@@ -26,7 +26,7 @@ jobs:
       - name: Install rendering dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install "pillow>=10.0.0" "arabic-reshaper>=3.0.0" "python-bidi>=0.4.2"
+          pip install -r requirements.txt
 
       - name: Render sample slides
         run: python render_check.py
