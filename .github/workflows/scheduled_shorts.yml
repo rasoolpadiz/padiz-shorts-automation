@@ -14,6 +14,12 @@ on:
 permissions:
   contents: write
 
+# Cron triggers on shared runners can bunch up when they are delayed, and two
+# overlapping runs would upload two Shorts at once. Queue them instead.
+concurrency:
+  group: padiz-shorts-publish
+  cancel-in-progress: false
+
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
@@ -48,5 +54,13 @@ jobs:
         run: |
           git config --global user.name "Padiz Automation Bot"
           git config --global user.email "bot@padiz.local"
-          git add posted_shorts.json processed_reels.json || true
-          git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update posted shorts state [skip ci]" && git push)
+          git add -f posted_shorts.json
+          if [ -f processed_reels.json ]; then git add -f processed_reels.json; fi
+          if git diff --staged --quiet; then
+            echo "No state change to commit."
+          else
+            git commit -m "chore: update posted shorts state [skip ci]"
+            # actions/checkout leaves a detached HEAD, so the target branch must
+            # be named explicitly - a bare "git push" fails there.
+            git push origin HEAD:main
+          fi

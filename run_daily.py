@@ -9,6 +9,7 @@ import os
 import sys
 import json
 import base64
+from datetime import datetime, timezone
 from topics_pool import FACTS_POOL
 import pipeline
 
@@ -39,24 +40,41 @@ def load_posted():
 
 def save_posted(topic_id, url):
     posted = load_posted()
-    posted.append({"id": topic_id, "url": url})
+    posted.append({
+        "id": topic_id,
+        "url": url,
+        "posted_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    })
     with open(POSTED_FILE, "w", encoding="utf-8") as f:
         json.dump(posted, f, ensure_ascii=False, indent=2)
+
+
+def pick_next_topic(posted_records):
+    """Pick a fresh topic; when the whole pool has been used, recycle the one
+    that was posted the longest time ago (round-robin) so the channel never
+    uploads the same topic twice in a row."""
+    posted_ids = {r["id"] for r in posted_records}
+
+    for item in FACTS_POOL:
+        if item["id"] not in posted_ids:
+            return item
+
+    last_posted = {}
+    for record in posted_records:
+        topic_id = record.get("id")
+        stamped = record.get("posted_at") or ""
+        if topic_id not in last_posted or stamped > last_posted[topic_id]:
+            last_posted[topic_id] = stamped
+
+    print("All facts in pool have been posted! Recycling the oldest topic...")
+    return min(FACTS_POOL, key=lambda item: last_posted.get(item["id"], ""))
+
 
 def main():
     ensure_auth()
     posted_records = load_posted()
-    posted_ids = {r["id"] for r in posted_records}
 
-    candidate = None
-    for item in FACTS_POOL:
-        if item["id"] not in posted_ids:
-            candidate = item
-            break
-
-    if not candidate:
-        print("All facts in pool have been posted! Recycling oldest...")
-        candidate = FACTS_POOL[0]
+    candidate = pick_next_topic(posted_records)
 
     print(f"Selected topic: {candidate['title']} (ID: {candidate['id']})")
     out_video = os.path.join(BASE_DIR, f"short_{candidate['id']}.mp4")
