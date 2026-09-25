@@ -17,6 +17,25 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 POSTED_FILE = os.path.join(BASE_DIR, "posted_shorts.json")
 TOKEN_PATH = os.path.join(BASE_DIR, "token.pickle")
 
+# Safety net: GitHub's cron can fire late, be retried, or be triggered manually
+# while a scheduled run is already queued. This guard keeps at most one upload
+# per slot window, so redundant triggers become harmless no-ops.
+MIN_GAP_MINUTES = 90
+
+
+def minutes_since_last_post(posted_records):
+    """Minutes since the most recent upload, or None when unknown."""
+    stamps = [r.get("posted_at") for r in posted_records if r.get("posted_at")]
+    if not stamps:
+        return None
+    try:
+        latest = datetime.fromisoformat(max(stamps))
+    except ValueError:
+        return None
+    if latest.tzinfo is None:
+        latest = latest.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - latest).total_seconds() / 60.0
+
 def ensure_auth():
     # If running in GitHub Actions, decode the secret token
     if not os.path.exists(TOKEN_PATH):
@@ -73,6 +92,13 @@ def pick_next_topic(posted_records):
 def main():
     ensure_auth()
     posted_records = load_posted()
+
+    gap = minutes_since_last_post(posted_records)
+    if gap is not None and gap < MIN_GAP_MINUTES:
+        print(f"Skipping: the last Short was published {gap:.1f} minutes ago "
+              f"(minimum gap between uploads is {MIN_GAP_MINUTES} minutes).")
+        print("Nothing to do - safe exit.")
+        return
 
     candidate = pick_next_topic(posted_records)
 
