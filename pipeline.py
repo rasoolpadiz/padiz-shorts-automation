@@ -96,7 +96,7 @@ def create_slide_image(category: str, title: str, text: str, slide_num: int, tot
 
     sub_font = ImageFont.truetype(FONT_PATH, 42)
     draw.rounded_rectangle([(140, 1620), (width - 140, 1740)], radius=30, fill=(220, 38, 38))
-    draw_persian(draw, (width // 2, 1680), "برای دانستنی‌های بیشتر دنبال کنید", sub_font, (255, 255, 255))
+    draw_persian(draw, (width // 2, 1680), "کانال رو سابسکرایب کنید تا ویدیوهای جدید رو از دست ندید", sub_font, (255, 255, 255))
 
     img.save(output_path, quality=95)
 
@@ -113,6 +113,8 @@ def get_audio_duration(file_path: str) -> float:
     res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
     return float(res.stdout.strip())
 
+VOICES = ["fa-IR-FaridNeural", "fa-IR-DilaraNeural"]
+
 def build_full_short(topic_data: dict, output_filename: str):
     work_dir = os.path.join(BASE_DIR, "temp_render")
     os.makedirs(work_dir, exist_ok=True)
@@ -125,13 +127,19 @@ def build_full_short(topic_data: dict, output_filename: str):
     total = len(slides)
     clip_files = []
 
+    # Support explicit voice selection per topic or alternate voices per slide/topic
+    base_voice_idx = topic_data.get("voice_index", 0)
+
     for idx, slide in enumerate(slides, start=1):
         img_path = os.path.join(work_dir, f"slide_{idx}.png")
         audio_path = os.path.join(work_dir, f"slide_{idx}.mp3")
         clip_path = os.path.join(work_dir, f"clip_{idx}.mp4")
 
+        # Alternate between Farid (male) and Dilara (female)
+        voice = slide.get("voice") or VOICES[(base_voice_idx + idx - 1) % len(VOICES)]
+
         create_slide_image(category, slide["title"], slide["text"], idx, total, img_path)
-        asyncio.run(generate_speech(slide["speech"], "fa-IR-FaridNeural", audio_path))
+        asyncio.run(generate_speech(slide["speech"], voice, audio_path))
         duration = get_audio_duration(audio_path) + 0.4
 
         ffmpeg_clip = [

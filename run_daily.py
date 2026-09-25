@@ -12,6 +12,7 @@ import base64
 from datetime import datetime, timezone
 from topics_pool import FACTS_POOL
 import pipeline
+import viral_hunter
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 POSTED_FILE = os.path.join(BASE_DIR, "posted_shorts.json")
@@ -99,6 +100,25 @@ def main():
               f"(minimum gap between uploads is {MIN_GAP_MINUTES} minutes).")
         print("Nothing to do - safe exit.")
         return
+
+    # Alternating mode: Check how many items were posted.
+    # Every 2nd run, try to hunt a Global Viral video! If not found, fallback to facts pool.
+    total_posted = len(posted_records)
+    viral_published = False
+
+    if total_posted % 2 == 1:
+        print("Scheduled turn for Global Viral Hunter! Scanning viral trends...")
+        try:
+            viral_url = viral_hunter.run_viral_hunter_job()
+            if viral_url:
+                viral_published = True
+                save_posted(f"viral_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}", viral_url)
+                print("Global Viral Short successfully published.")
+                return
+            else:
+                print("No viral video met criteria, falling back to original Persian fact pool...")
+        except Exception as e:
+            print(f"Viral hunter encountered an issue: {e}. Falling back to fact pool...")
 
     candidate = pick_next_topic(posted_records)
 
