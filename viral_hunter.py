@@ -157,20 +157,54 @@ def download_video(video_url, output_path):
         ydl.download([video_url])
     return output_path
 
+def generate_branding_overlay(overlay_path):
+    from PIL import Image, ImageDraw, ImageFont
+    overlay_img = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay_img)
+    # Branded top translucent bar
+    draw.rectangle([(0, 90), (1080, 180)], fill=(0, 0, 0, 150))
+    
+    # Try system fonts, fallback to default if not found
+    font = None
+    for fp in ["C:/Windows/Fonts/arialbd.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]:
+        if os.path.exists(fp):
+            try:
+                font = ImageFont.truetype(fp, 42)
+                break
+            except Exception:
+                pass
+    if font is None:
+        font = ImageFont.load_default()
+
+    text = "@padiz_studio"
+    bbox = draw.textbbox((0, 0), text, font=font)
+    tw = bbox[2] - bbox[0]
+    draw.text(((1080 - tw) // 2, 112), text, font=font, fill=(255, 255, 255, 240))
+    overlay_img.save(overlay_path, "PNG")
+    return overlay_path
+
 def apply_padiz_branding(input_video, output_video):
-    filter_complex = (
-        "drawbox=y=ih*0.05:color=black@0.60:width=iw:height=75:t=fill,"
-        "drawtext=text='@padiz_studio':fontcolor=white:fontsize=36:x=(w-text_w)/2:y=h*0.05+18"
-    )
+    overlay_png = os.path.join(BASE_DIR, "brand_temp_overlay.png")
+    generate_branding_overlay(overlay_png)
+
+    filter_complex = "[0:v][1:v]scale2ref=iw:ih[v0][v1];[v0][v1]overlay=0:0"
     cmd = [
         "ffmpeg", "-y",
         "-i", input_video,
-        "-vf", filter_complex,
+        "-i", overlay_png,
+        "-filter_complex", filter_complex,
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "22",
         "-c:a", "copy",
         output_video
     ]
-    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    finally:
+        if os.path.exists(overlay_png):
+            try:
+                os.remove(overlay_png)
+            except Exception:
+                pass
     return output_video
 
 def upload_to_youtube(video_path, title, description, tags):
