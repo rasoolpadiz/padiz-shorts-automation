@@ -6,6 +6,7 @@ import subprocess
 import pickle
 import re
 from PIL import Image, ImageDraw, ImageFont
+from PIL import features as pil_features
 import arabic_reshaper
 from bidi.algorithm import get_display
 import edge_tts
@@ -16,11 +17,37 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FONT_PATH = os.path.join(BASE_DIR, "Vazirmatn-Bold.ttf")
 TOKEN_PATH = os.path.join(BASE_DIR, "token.pickle")
 
+# Pillow builds that ship libraqm already run HarfBuzz (letter joining) and
+# FriBidi (right-to-left reordering) internally, so feeding them text that was
+# pre-processed by arabic_reshaper + python-bidi applies BOTH steps twice and the
+# Persian text comes out mirrored/reversed. Builds without libraqm (most local
+# Windows installs) cannot shape at all and *require* that pre-processing.
+# The GitHub Actions runner (ubuntu-latest + pip wheel) DOES have libraqm, the
+# local machine does not, so the decision must be made at runtime.
+HAS_RAQM = bool(pil_features.check("raqm"))
+
 def prepare_bidi_text(text: str) -> str:
+    """Return text in the form Pillow can draw correctly on THIS build."""
     cleaned = re.sub(r'[\U00010000-\U0010ffff]', '', text)
     cleaned = cleaned.replace('\u0643', 'ک').replace('\u064a', 'ی').replace('\u0649', 'ی')
-    reshaped = arabic_reshaper.reshape(cleaned.strip())
+    cleaned = cleaned.strip()
+
+    if HAS_RAQM:
+        # Let Pillow/Raqm do the joining + bidi reordering itself.
+        return cleaned
+
+    reshaped = arabic_reshaper.reshape(cleaned)
     return get_display(reshaped)
+
+def draw_persian(draw, xy, text: str, font, fill, anchor: str = "mm"):
+    """Draw a Persian string correctly regardless of the Pillow build in use."""
+    kwargs = {"font": font, "fill": fill, "anchor": anchor}
+    if HAS_RAQM:
+        # Explicit RTL paragraph direction so mixed lines (Persian + Latin)
+        # are always laid out from right to left.
+        kwargs["direction"] = "rtl"
+        kwargs["language"] = "fa"
+    draw.text(xy, prepare_bidi_text(text), **kwargs)
 
 def create_slide_image(category: str, title: str, text: str, slide_num: int, total_slides: int, output_path: str):
     width, height = 1080, 1920
@@ -31,8 +58,7 @@ def create_slide_image(category: str, title: str, text: str, slide_num: int, tot
 
     badge_font = ImageFont.truetype(FONT_PATH, 38)
     badge_label = f"{category} | Padiz Studio" if category else "Padiz Studio"
-    badge_text = prepare_bidi_text(badge_label)
-    draw.text((width // 2, 220), badge_text, font=badge_font, fill=(148, 163, 184), anchor="mm")
+    draw_persian(draw, (width // 2, 220), badge_label, badge_font, (148, 163, 184))
 
     card_margin = 70
     card_top = 400
@@ -40,8 +66,7 @@ def create_slide_image(category: str, title: str, text: str, slide_num: int, tot
     draw.rounded_rectangle([(card_margin, card_top), (width - card_margin, card_bottom)], radius=40, fill=(30, 41, 59), outline=(51, 65, 85), width=4)
 
     title_font = ImageFont.truetype(FONT_PATH, 54)
-    reshaped_title = prepare_bidi_text(title)
-    draw.text((width // 2, card_top + 130), reshaped_title, font=title_font, fill=(250, 204, 21), anchor="mm")
+    draw_persian(draw, (width // 2, card_top + 130), title, title_font, (250, 204, 21))
 
     draw.line([(card_margin + 60, card_top + 210), (width - card_margin - 60, card_top + 210)], fill=(71, 85, 105), width=2)
 
@@ -63,18 +88,15 @@ def create_slide_image(category: str, title: str, text: str, slide_num: int, tot
     start_y = card_top + 340 + ((card_bottom - card_top - 420 - total_h) // 2)
 
     for i, line in enumerate(lines):
-        line_bidi = prepare_bidi_text(line)
         y = start_y + (i * line_height)
-        draw.text((width // 2, y), line_bidi, font=content_font, fill=(241, 245, 249), anchor="mm")
+        draw_persian(draw, (width // 2, y), line, content_font, (241, 245, 249))
 
     progress_font = ImageFont.truetype(FONT_PATH, 34)
-    prog_text = prepare_bidi_text(f"نکته {slide_num} از {total_slides}")
-    draw.text((width // 2, card_bottom - 70), prog_text, font=progress_font, fill=(148, 163, 184), anchor="mm")
+    draw_persian(draw, (width // 2, card_bottom - 70), f"نکته {slide_num} از {total_slides}", progress_font, (148, 163, 184))
 
     sub_font = ImageFont.truetype(FONT_PATH, 42)
-    sub_text = prepare_bidi_text("برای دانستنی‌های بیشتر دنبال کنید 🔔")
     draw.rounded_rectangle([(140, 1620), (width - 140, 1740)], radius=30, fill=(220, 38, 38))
-    draw.text((width // 2, 1680), sub_text, font=sub_font, fill=(255, 255, 255), anchor="mm")
+    draw_persian(draw, (width // 2, 1680), "برای دانستنی‌های بیشتر دنبال کنید", sub_font, (255, 255, 255))
 
     img.save(output_path, quality=95)
 
@@ -94,6 +116,9 @@ def get_audio_duration(file_path: str) -> float:
 def build_full_short(topic_data: dict, output_filename: str):
     work_dir = os.path.join(BASE_DIR, "temp_render")
     os.makedirs(work_dir, exist_ok=True)
+
+    print(f"[render] libraqm={HAS_RAQM} -> Persian shaping by "
+          f"{'Pillow/Raqm' if HAS_RAQM else 'arabic_reshaper + python-bidi'}")
 
     category = topic_data.get("category", "")
     slides = topic_data["slides"]
