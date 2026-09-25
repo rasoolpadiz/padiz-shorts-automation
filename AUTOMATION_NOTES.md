@@ -89,11 +89,20 @@ python channel_admin.py delete <VIDEO_ID>      # حذف کامل
    # سپس مقدار جدید را در GitHub → Settings → Secrets → YOUTUBE_TOKEN_B64 ثبت کنید
    ```
 3. **خطای سهمیه (`quotaExceeded`)** → سهمیه ۱۰٬۰۰۰ واحدی روز تمام شده؛ فردا خودکار درست می‌شود.
-4. **اجرا نشدن کرون** → تأخیر طبیعی است. برای زمان‌بندی دقیق می‌توانید از یک
-   سرویس cron خارجی (مثل cron-job.org) استفاده کنید که این endpoint را با یک
-   Personal Access Token با دسترسی `actions: write` صدا بزند:
+4. **اجرا نشدن کرون گیت‌هاب** → این یک مشکل شناخته‌شده در مخزن‌های خصوصی است
+   (تأخیر ۳۰ دقیقه تا چند ساعت، و در مواردی هیچ‌وقت اجرا نشدن). فایل آماده
+   `apps_script/trigger.gs` را در
+   [script.google.com](https://script.google.com) باز کنید: زمان‌بند گوگل (رایگان و دقیق)
+   هر روز ساعت‌های ۰۹:۳۰/۱۳:۳۰/۱۷:۳۰/۲۰:۳۰/۲۳:۳۰ تهران این workflow را دیسپچ می‌کند.
+   برای این کار فقط یک Personal Access Token با دسترسی `Actions: read and write`
+   لازم است که در Script properties با نام `GH_TOKEN` ذخیره می‌شود
+   (جزئیات در بالای همان فایل نوشته شده است).
+   جایگزین ساده‌تر: در [cron-job.org](https://cron-job.org) با منطقهٔ زمانی تهران، این
+   درخواست را با هدر `Authorization: Bearer <توکن>` زمان‌بندی کنید:
    `POST https://api.github.com/repos/rasoolpadiz/padiz-shorts-automation/actions/workflows/scheduled_shorts.yml/dispatches`
-   با بدنه `{"ref":"main"}`. (توکن را در سرویس ثالث ذخیره کنید، نه در مخزن.)
+   با بدنهٔ JSON: `{"ref":"main"}`
+   چون `MIN_GAP_MINUTES = 90` فعال است، اگر کرون گیت‌هاب و زمان‌بند خارجی هر دو
+   در یک بازه اجرا شوند، فقط یکی آپلود می‌کند.
 5. **اطلاع از خطاها**: Settings آکانت گیت‌هاب → Notifications → Actions را فعال کنید
    تا ایمیل خطای اجرای زمان‌بندی‌شده دریافت کنید.
 
