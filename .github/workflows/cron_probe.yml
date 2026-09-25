@@ -1,0 +1,19 @@
+name: Cron Probe
+
+# Temporary diagnostic: verifies that GitHub's scheduler actually fires for this
+# repository. Runs every 5 minutes; safe to delete once confirmed.
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report firing time
+        run: |
+          echo "scheduler fired (UTC): $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "event: ${{ github.event_name }}"
