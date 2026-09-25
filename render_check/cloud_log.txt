@@ -1,0 +1,24 @@
+============================================================
+Pillow version      : 12.3.0
+libraqm available   : True
+raqm version        : 0.10.5
+harfbuzz available  : True
+fribidi available   : True
+text mode           : Pillow/Raqm shapes the text (no pre-processing)
+============================================================
+Topic: چرا عاشق آدم‌های دست‌نیافتنی می‌شیم؟ #shorts  (category: روانشناسی رابطه)
+
+rendered -> /home/runner/work/padiz-shorts-automation/padiz-shorts-automation/render_check/slide_1.png
+rendered -> /home/runner/work/padiz-shorts-automation/padiz-shorts-automation/render_check/slide_2.png
+rendered -> /home/runner/work/padiz-shorts-automation/padiz-shorts-automation/render_check/slide_3.png
+raw      : اثر ارزش کمیاب
+prepared : ا(U+0627) ث(U+062B) ر(U+0631)  (U+0020) ا(U+0627) ر(U+0631) ز(U+0632) ش(U+0634)  (U+0020) ک(U+06A9) م(U+0645) ی(U+06CC)
+
+raw      : مغز انسان چیزی را که به سختی به دست بیاورد ناخودآگاه باارزش‌تر می‌داند!
+prepared : م(U+0645) غ(U+063A) ز(U+0632)  (U+0020) ا(U+0627) ن(U+0646) س(U+0633) ا(U+0627) ن(U+0646)  (U+0020) چ(U+0686) ی(U+06CC)
+
+raw      : نکته 1 از 3
+prepared : ن(U+0646) ک(U+06A9) ت(U+062A) ه(U+0647)  (U+0020) 1(U+0031)  (U+0020) ا(U+0627) ز(U+0632)  (U+0020) 3(U+0033)
+
+rendered -> /home/runner/work/padiz-shorts-automation/padiz-shorts-automation/render_check/mixed_samples.png
+RENDER CHECK DONE (exit 0)
