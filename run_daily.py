@@ -105,12 +105,12 @@ def main():
     # Every 2nd run, try to hunt a Global Viral video! If not found, fallback to facts pool.
     total_posted = len(posted_records)
     viral_published = False
+    dry_run = os.environ.get("VIRAL_DRY_RUN") == "1"
 
-    if total_posted % 2 == 1:
+    if total_posted % 2 == 1 or dry_run:
         print("Scheduled turn for Global Viral Hunter! Scanning viral trends...")
-        dry_run = os.environ.get("VIRAL_DRY_RUN") == "1"
         if dry_run:
-            print("(VIRAL_DRY_RUN=1: only find + download + brand, nothing is uploaded)")
+            print("(VIRAL_DRY_RUN=1: find + download + brand only, no upload at all)")
         try:
             viral_url = viral_hunter.run_viral_hunter_job(dry_run=dry_run)
             if viral_url and not dry_run:
@@ -120,7 +120,7 @@ def main():
                 return
             elif dry_run:
                 print("=" * 60)
-                print("DRY RUN FINISHED - nothing was uploaded and nothing was recorded.")
+                print("DRY RUN FINISHED - nothing was uploaded, nothing was recorded.")
                 print("=" * 60)
                 return
             else:
@@ -129,11 +129,19 @@ def main():
             print("!" * 60)
             print("VIRAL TURN SKIPPED - YOUTUBE BLOCKED THE DOWNLOAD ON THIS MACHINE")
             print(e)
+            if dry_run:
+                print("Dry run: no fallback video is published either.")
+                print("!" * 60)
+                return
             print("Falling back to the fact pool so the channel still gets its video.")
             print("!" * 60)
         except Exception as e:
             print("!" * 60)
             print(f"VIRAL HUNTER ERROR ({type(e).__name__}): {e}")
+            if dry_run:
+                print("Dry run: no fallback video is published either.")
+                print("!" * 60)
+                return
             print("Falling back to the fact pool so the channel still gets its video.")
             print("!" * 60)
 
