@@ -1,8 +1,14 @@
 name: Padiz 24/7 Shorts Automation
 
-# Schedule disabled: the project is on hold. Only manual runs (Run workflow)
-# are possible; nothing will run automatically.
 on:
+  schedule:
+    # Runs 5 times a day (UTC times -> Tehran times UTC+3:30):
+    # 06:00 UTC = 09:30 Tehran
+    # 10:00 UTC = 13:30 Tehran
+    # 14:00 UTC = 17:30 Tehran
+    # 17:00 UTC = 20:30 Tehran
+    # 20:00 UTC = 23:30 Tehran
+    - cron: '0 6,10,14,17,20 * * *'
   workflow_dispatch:
     inputs:
       test_only:
