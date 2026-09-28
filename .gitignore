@@ -1,0 +1,41 @@
+# --- Secrets: must never be committed -------------------------------------
+token.pickle
+client_secret.json
+YOUTUBE_TOKEN_B64.txt
+yt_cookies.txt
+yt_cookies_b64.txt
+cookies.txt
+.env
+
+# --- Runtime / debug output ----------------------------------------------
+viral_last_error.log
+viral_cron.log
+viral_cli_out.log
+viral_cli_err.log
+schedule_watch.txt
+render_check_log.txt
+__pycache__/
+*.pyc
+
+# --- Rendered media (generated, never part of the automation) -------------
+viral_raw_*.mp4
+viral_branded_*.mp4
+viral_manual_*.mp4
+short_*.mp4
+shorts_sample_*.mp4
+test_*.mp4
+test_*.mp3
+test_*.png
+debug_*.mp4
+brand_temp_overlay.png
+gemini_key_check.mp3
+
+# --- Local scratch dirs ---------------------------------------------------
+temp_render/
+render_check/
+aesthetic_build/
+fast_build/
+voice_check/
+
+# Fonts (Vazirmatn-*.ttf) and background music (sad_aesthetic_bg.mp3) ARE
+# tracked assets used by the runner, so they are deliberately not ignored.

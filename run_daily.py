@@ -117,8 +117,20 @@ def main():
                 return
             else:
                 print("No viral video met criteria, falling back to original Persian fact pool...")
+        except viral_hunter.ViralDownloadBlocked as e:
+            print("!" * 60)
+            print("VIRAL TURN SKIPPED - YOUTUBE BLOCKED THE DOWNLOAD ON THIS MACHINE")
+            print(e)
+            print("This is the 'Sign in to confirm you're not a bot' block that hits")
+            print("GitHub/AWS datacenter IPs. Add the YT_COOKIES_B64 secret, or run")
+            print("`python viral_hunter.py --once` on your own PC/server.")
+            print("Falling back to the fact pool so the channel still gets its video.")
+            print("!" * 60)
         except Exception as e:
-            print(f"Viral hunter encountered an issue: {e}. Falling back to fact pool...")
+            print("!" * 60)
+            print(f"VIRAL HUNTER ERROR ({type(e).__name__}): {e}")
+            print("Falling back to the fact pool so the channel still gets its video.")
+            print("!" * 60)
 
     candidate = pick_next_topic(posted_records)
 

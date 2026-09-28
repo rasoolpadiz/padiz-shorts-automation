@@ -47,6 +47,15 @@ jobs:
       - name: Run automated Shorts pipeline
         env:
           YOUTUBE_TOKEN_B64: ${{ secrets.YOUTUBE_TOKEN_B64 }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # YouTube refuses yt-dlp downloads from datacenter IPs with
+          # "Sign in to confirm you're not a bot". Supplying a cookie jar for a
+          # (throwaway) YouTube account is the supported workaround. Create it
+          # with `python make_cookies.py` locally and store the printed base64
+          # value as this secret.
+          YT_COOKIES_B64: ${{ secrets.YT_COOKIES_B64 }}
+          # Optional: restrict the viral hunter to Creative Commons videos.
+          # VIRAL_LICENSE: creativeCommon
         run: |
           python run_daily.py
 
