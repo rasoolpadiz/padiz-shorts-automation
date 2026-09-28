@@ -26,7 +26,12 @@ except Exception:
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 REPO = "rasoolpadiz/padiz-shorts-automation"
+# python check_actions.py --workflow pipeline_probe.yml   (default: publishing)
 WORKFLOW = "scheduled_shorts.yml"
+if "--workflow" in sys.argv:
+    _idx = sys.argv.index("--workflow")
+    if _idx + 1 < len(sys.argv):
+        WORKFLOW = sys.argv[_idx + 1]
 
 INTERESTING = re.compile(
     r"(Traceback|Error|error:|ERROR|Exception|quotaExceeded|uploadLimitExceeded"
