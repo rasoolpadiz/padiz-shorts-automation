@@ -91,21 +91,25 @@ def pick_next_topic(posted_records):
 
 
 def main():
+    dry_run = os.environ.get("VIRAL_DRY_RUN") == "1"
     ensure_auth()
     posted_records = load_posted()
 
     gap = minutes_since_last_post(posted_records)
     if gap is not None and gap < MIN_GAP_MINUTES:
-        print(f"Skipping: the last Short was published {gap:.1f} minutes ago "
-              f"(minimum gap between uploads is {MIN_GAP_MINUTES} minutes).")
-        print("Nothing to do - safe exit.")
-        return
+        if dry_run:
+            print(f"(test_only: the {MIN_GAP_MINUTES}-minute gap rule is ignored, "
+                  f"last upload was {gap:.1f} minutes ago)")
+        else:
+            print(f"Skipping: the last Short was published {gap:.1f} minutes ago "
+                  f"(minimum gap between uploads is {MIN_GAP_MINUTES} minutes).")
+            print("Nothing to do - safe exit.")
+            return
 
     # Alternating mode: Check how many items were posted.
     # Every 2nd run, try to hunt a Global Viral video! If not found, fallback to facts pool.
     total_posted = len(posted_records)
     viral_published = False
-    dry_run = os.environ.get("VIRAL_DRY_RUN") == "1"
 
     if total_posted % 2 == 1 or dry_run:
         print("Scheduled turn for Global Viral Hunter! Scanning viral trends...")
