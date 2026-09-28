@@ -49,6 +49,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Install Chrome (for the browser-based PO token provider)
+        uses: browser-actions/setup-chrome@v1
+
       - name: Start YouTube PO-token provider (fixes "Sign in to confirm you're not a bot")
         run: |
           docker run --name bgutil-provider -d --init --shm-size=1g \

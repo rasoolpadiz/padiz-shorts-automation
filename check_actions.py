@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Pull the REAL GitHub Actions logs for the publishing workflow and show the
 lines that explain why the viral-hunter half failed.
 
@@ -109,10 +109,34 @@ def show_interesting(tok, run):
                 print("   ", line.strip()[:200])
 
 
+def dispatch_test(tok, test_only=True):
+    url = (f"https://api.github.com/repos/{REPO}/actions/workflows/"
+           f"{WORKFLOW}/dispatches")
+    payload = {"ref": "main", "inputs": {"test_only": "true" if test_only else "false"}}
+    request = urllib.request.Request(url, data=json.dumps(payload).encode(), method="POST")
+    request.add_header("Authorization", f"token {tok}")
+    request.add_header("Accept", "application/vnd.github+json")
+    request.add_header("X-GitHub-Api-Version", "2022-11-28")
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return response.status
+
+
 def main():
     tok = github_token()
     if not tok:
         raise SystemExit("no github token found via 'git credential fill'")
+
+    if "--dispatch" in sys.argv:
+        status = dispatch_test(tok)
+        print(f"dispatch status: {status} (204 = accepted)")
+        print("waiting for the run to start ...")
+        time.sleep(12)
+        runs = list_runs(tok, limit=3)
+        for run in runs:
+            if run["event"] == "workflow_dispatch":
+                print("run id:", run["id"], "-> use: python check_actions.py --run", run["id"])
+                break
+        return
 
     print("repo:", REPO)
     runs = list_runs(tok)
