@@ -1,0 +1,154 @@
+name: Pipeline Probe (A/B/C independent tests)
+
+# A single, non-production test job: it measures whether THIS runner
+# environment can do discovery, download and upload - nothing else.
+# It never touches posted_shorts.json, processed_reels.json, or the
+# scheduled pipeline, and it never retries forever: one pass, one verdict.
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_id:
+        description: "Fixed video ID for TEST B (canary default: Me at the zoo)"
+        type: string
+        default: "jNQXAC9IVRw"
+      run_test_a:
+        description: "Run TEST A (search -> video ID)"
+        type: boolean
+        default: true
+      run_test_c:
+        description: "Run TEST C (local MP4 -> videos.insert, private)"
+        type: boolean
+        default: false
+      use_bgutil:
+        description: "Start the bgutil PO-token container for TEST B"
+        type: boolean
+        default: true
+      use_wpc:
+        description: "Install Chrome + wpc browser PO-token provider for TEST B"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Chrome (for wpc PO-token provider)
+        if: inputs.use_wpc
+        id: chrome
+        uses: browser-actions/setup-chrome@v1
+
+      - name: Environment facts (egress IP, latency)
+        id: env
+        run: |
+          start=$(date +%s%3N)
+          ip=$(curl -s --max-time 10 https://api.ipify.org || echo "unknown")
+          end=$(date +%s%3N)
+          echo "egress_ip=$ip" >> "$GITHUB_OUTPUT"
+          echo "ip_latency_ms=$((end - start))" >> "$GITHUB_OUTPUT"
+          echo "Runner egress IP: $ip (ipify latency $((end - start)) ms)"
+
+      - name: Start bgutil PO-token provider
+        if: inputs.use_bgutil
+        run: |
+          docker run --name bgutil-provider -d --init --shm-size=1g \
+            -p 127.0.0.1:4416:4416 brainicism/bgutil-ytdlp-pot-provider
+          for i in $(seq 1 30); do
+            if curl -s --max-time 2 http://127.0.0.1:4416/ping >/dev/null; then
+              echo "provider ping OK after $i tries"
+              curl -s http://127.0.0.1:4416/ping
+              echo
+              break
+            fi
+            sleep 2
+          done
+
+      - name: TEST A - search -> video ID
+        if: inputs.run_test_a
+        env:
+          YOUTUBE_TOKEN_B64: ${{ secrets.YOUTUBE_TOKEN_B64 }}
+        run: python -u test_a_search.py
+
+      - name: TEST B - video ID -> MP4
+        env:
+          BGUTIL_URL: http://127.0.0.1:4416
+          WPC_BROWSER_PATH: ${{ inputs.use_wpc && steps.chrome.outputs.chrome-path || '' }}
+          YT_COOKIES_B64: ${{ secrets.YT_COOKIES_B64 }}
+        run: python -u test_b_download.py --video-id "${{ inputs.video_id }}"
+
+      - name: TEST C - local MP4 -> YouTube (private)
+        if: inputs.run_test_c
+        env:
+          YOUTUBE_TOKEN_B64: ${{ secrets.YOUTUBE_TOKEN_B64 }}
+        run: python -u test_c_upload.py --privacy private
+
+      - name: Probe summary
+        if: always()
+        run: |
+          {
+            echo "## Pipeline probe"
+            echo "| fact | value |"
+            echo "|---|---|"
+            echo "| egress IP | ${{ steps.env.outputs.egress_ip }} |"
+            echo "| ipify latency | ${{ steps.env.outputs.ip_latency_ms }} ms |"
+            python - <<'PY'
+          import json, os, pathlib
+          def show(name):
+              p = pathlib.Path(name)
+              if not p.exists():
+                  return f"| {name} | not run |"
+              d = json.loads(p.read_text(encoding="utf-8"))
+              verdict = "PASS" if d.get("pass") else "FAIL"
+              extra = ""
+              if d.get("file"):
+                  extra = (f" size={d['file']['size_bytes']} "
+                           f"sha256={d['file']['sha256'][:16]}… "
+                           f"client={d['file']['client_used']}")
+              if d.get("video_id"):
+                  extra = f" video_id={d['video_id']}"
+              if d.get("ids"):
+                  extra = f" ids={len(d['ids'])}"
+              return f"| {d.get('name', name)} | {verdict}{extra} |"
+          for f in ("test_a_result.json", "test_b_result.json", "test_c_result.json"):
+              print(show(f))
+          PY
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload test logs as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: probe-logs
+          path: |
+            test_*_result.json
+            test_b_logs/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Stop bgutil provider
+        if: always()
+        run: docker rm -f bgutil-provider || true
