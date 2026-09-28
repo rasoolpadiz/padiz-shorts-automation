@@ -8,6 +8,10 @@ cookies.txt
 .env
 
 # --- Runtime / debug output ----------------------------------------------
+deploy_*.log
+deploy_*_err.log
+viral_windows.log
+_server_status.py
 viral_last_error.log
 viral_cron.log
 viral_cli_out.log
