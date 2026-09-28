@@ -59,18 +59,20 @@ jobs:
             sleep 2
           done
           docker logs bgutil-provider 2>&1 | tail -5
-          echo "--- warm-up: first metadata fetch with the web client + PO token ---"
+          echo "--- warm-up: metadata fetch through a PO token (mweb is the recommended client) ---"
           ok=0
-          for i in 1 2 3 4 5; do
-            if python -m yt_dlp --skip-download --no-warnings -v \
-                 --extractor-args "youtube:player_client=web" \
-                 "https://www.youtube.com/watch?v=jNQXAC9IVRw" 2>pot_warmup.txt; then
-              echo "warm-up OK on attempt $i"
-              ok=1
-              break
-            fi
-            echo "warm-up attempt $i failed, retrying in 15s ..."
-            sleep 15
+          for client in mweb web tv; do
+            for i in 1 2 3; do
+              if python -m yt_dlp --skip-download --no-warnings -v \
+                   --extractor-args "youtube:player_client=$client" \
+                   "https://www.youtube.com/watch?v=jNQXAC9IVRw" 2>pot_warmup.txt; then
+                echo "warm-up OK with client $client on attempt $i"
+                ok=1
+                break 2
+              fi
+              echo "warm-up ($client) attempt $i failed, retrying in 15s ..."
+              sleep 15
+            done
           done
           echo "--- PO token lines from the warm-up ---"
           grep -iE "pot|token" pot_warmup.txt | head -20 || true
