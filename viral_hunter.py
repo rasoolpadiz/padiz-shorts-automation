@@ -202,15 +202,21 @@ def cookies_file():
 
 
 # YouTube answers yt-dlp on datacenter IPs (GitHub runners and most VPS hosts)
-# with "Sign in to confirm you're not a bot". Different internal player clients
-# are asked in turn because some of them still answer without a PO token; a
-# cookie file (see cookies_file) is what makes the run reliable.
+# with "Sign in to confirm you're not a bot". The official proof-of-origin token
+# provider (a container on port 4416 + the bgutil-ytdlp-pot-provider plugin in
+# requirements.txt) fixes this without any Google account; yt-dlp finds the
+# token automatically. Cookies and YT_PROXY are used as well when present, and
+# the different internal player clients are tried in turn as a fallback.
 DOWNLOAD_ATTEMPTS = [
     ("default", None),
     ("android+web_safari", ["android", "web_safari"]),
-    ("tv", ["tv"]),
+    ("tv_embedded", ["tv_embedded"]),
+    ("web_embedded", ["web_embedded"]),
+    ("android_vr", ["android_vr"]),
+    ("web_creator", ["web_creator"]),
     ("ios", ["ios"]),
     ("mweb", ["mweb"]),
+    ("tv", ["tv"]),
 ]
 
 
@@ -226,6 +232,15 @@ def download_video(video_url, output_path):
     else:
         print("[download] no cookie file found - a datacenter IP will be refused")
 
+    # YouTube blocks datacenter IPs (GitHub runners, most VPS hosts) with
+    # "Sign in to confirm you're not a bot". Pointing yt-dlp at a proxy whose
+    # exit IP is not flagged avoids that without needing a cookie jar.
+    proxy = os.environ.get("YT_PROXY", "").strip()
+    if proxy:
+        print(f"[download] routing through proxy: {proxy}")
+    elif not cookie:
+        print("[download] no proxy and no cookies: the download will probably be refused")
+
     last_error = None
     for label, clients in DOWNLOAD_ATTEMPTS:
         ydl_opts = {
@@ -240,6 +255,8 @@ def download_video(video_url, output_path):
         }
         if cookie:
             ydl_opts["cookiefile"] = cookie
+        if proxy:
+            ydl_opts["proxy"] = proxy
         if clients:
             ydl_opts["extractor_args"] = {"youtube": {"player_client": clients}}
 
@@ -400,8 +417,11 @@ def _remember_error(message):
         pass
 
 
-def run_viral_hunter_job():
+def run_viral_hunter_job(dry_run=False):
     """Find -> download -> brand -> upload one viral Short.
+
+    With ``dry_run=True`` it stops after producing the branded file, so the whole
+    path can be tested on a runner without publishing anything.
 
     Returns the published URL, or None when nothing met the criteria. A refused
     download raises :class:`ViralDownloadBlocked` after printing a loud banner,
@@ -430,6 +450,14 @@ def run_viral_hunter_job():
 
         print("Applying Padiz branding (vertical 1080x1920)...")
         apply_padiz_branding(raw_path, branded_path)
+
+        if dry_run:
+            size = os.path.getsize(branded_path)
+            print("=" * 60)
+            print("DRY RUN OK - branded file ready:", branded_path, f"({size} bytes)")
+            print("Nothing was uploaded and the video id was not recorded.")
+            print("=" * 60)
+            return f"DRY_RUN:{branded_path}"
 
         print("Uploading branded viral video to YouTube channel @padiz...")
         short_url = upload_to_youtube(branded_path, niche["title_fa"], niche["desc_fa"], niche["tags"])

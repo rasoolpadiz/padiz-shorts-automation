@@ -52,7 +52,23 @@ IP سرور است.
 
 
 
-## راه‌اندازی (یکی از دو مسیر)
+## راه‌حل نهایی: سرویس رسمی PO-Token (بدون اکانت و بدون کوکی)
+
+یوتیوب برای دانلود از IP دیتاسنتر یک **توکن اثبات‌Origin** می‌خواهد. راه‌حل
+رسمی و رایگان، پروژهٔ [bgutil-ytdlp-pot-provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider)
+است که همان توکن را برای yt-dlp می‌سازد:
+
+* **در GitHub Actions** (پیش‌فرض و توصیه‌شده): ورک‌فلو یک کانتینر
+  `brainicism/bgutil-ytdlp-pot-provider` را روی پورت ۴۴۱۶ بالا می‌آورد و پلاگین
+  `bgutil-ytdlp-pot-provider` (در `requirements.txt`) توکن را خودکار به yt-dlp
+  می‌دهد. هیچ اکانت گوگل و هیچ کوکی لازم نیست.
+* **روی سرور اختصاصی**: چون Docker روی سرور فروش VPN نصب نیست، این مسیر با
+  **کوکی** (`yt_cookies.txt`) یا **پروکسی** (`YT_PROXY`) کار می‌کند — نه با کانتینر.
+
+آزمایش بدون آپلود (هیچ ویدیویی منتشر نمی‌شود):
+Actions → **Padiz 24/7 Shorts Automation** → Run workflow → `test_only = true`
+
+
 
 ### مسیر A — اجرا روی سرور خودتان (توصیه‌شده، بدون بلاک IP)
 

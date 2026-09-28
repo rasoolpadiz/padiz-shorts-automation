@@ -10,6 +10,11 @@ on:
     # 20:00 UTC = 23:30 Tehran
     - cron: '0 6,10,14,17,20 * * *'
   workflow_dispatch:
+    inputs:
+      test_only:
+        description: "فقط تست (پیدا کردن + دانلود + برندینگ) بدون آپلود به یوتیوب"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -44,20 +49,39 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Start YouTube PO-token provider (fixes "Sign in to confirm you're not a bot")
+        run: |
+          docker run --name bgutil-provider -d --init --shm-size=1g \
+            -p 127.0.0.1:4416:4416 brainicism/bgutil-ytdlp-pot-provider
+          for i in $(seq 1 30); do
+            if curl -s -o /dev/null http://127.0.0.1:4416/; then break; fi
+            sleep 2
+          done
+          echo "--- POT provider log ---"
+          docker logs bgutil-provider 2>&1 | tail -10
+          echo "--- providers seen by yt-dlp ---"
+          python -m yt_dlp -v --simulate "https://www.youtube.com/watch?v=jNQXAC9IVRw" 2>&1 \
+            | grep -i "pot" | head -5 || true
+
       - name: Run automated Shorts pipeline
         env:
           YOUTUBE_TOKEN_B64: ${{ secrets.YOUTUBE_TOKEN_B64 }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          # YouTube refuses yt-dlp downloads from datacenter IPs with
-          # "Sign in to confirm you're not a bot". Supplying a cookie jar for a
-          # (throwaway) YouTube account is the supported workaround. Create it
-          # with `python make_cookies.py` locally and store the printed base64
-          # value as this secret.
+          # YouTube refuses yt-dlp downloads from datacenter IPs without a proof-of-origin
+          # token. The container started above provides it (no Google account needed).
+          # A cookie jar stays supported as a fallback: create it with
+          # `python make_cookies.py` and store the printed base64 as this secret.
           YT_COOKIES_B64: ${{ secrets.YT_COOKIES_B64 }}
+          # test_only=true from the "Run workflow" button: no upload, no state change.
+          VIRAL_DRY_RUN: ${{ inputs.test_only && '1' || '0' }}
           # Optional: restrict the viral hunter to Creative Commons videos.
           # VIRAL_LICENSE: creativeCommon
         run: |
           python run_daily.py
+
+      - name: Stop PO-token provider
+        if: always()
+        run: docker rm -f bgutil-provider || true
 
       - name: Commit and push updated state
         run: |

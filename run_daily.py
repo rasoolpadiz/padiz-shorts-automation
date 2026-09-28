@@ -108,12 +108,20 @@ def main():
 
     if total_posted % 2 == 1:
         print("Scheduled turn for Global Viral Hunter! Scanning viral trends...")
+        dry_run = os.environ.get("VIRAL_DRY_RUN") == "1"
+        if dry_run:
+            print("(VIRAL_DRY_RUN=1: only find + download + brand, nothing is uploaded)")
         try:
-            viral_url = viral_hunter.run_viral_hunter_job()
-            if viral_url:
+            viral_url = viral_hunter.run_viral_hunter_job(dry_run=dry_run)
+            if viral_url and not dry_run:
                 viral_published = True
                 save_posted(f"viral_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}", viral_url)
                 print("Global Viral Short successfully published.")
+                return
+            elif dry_run:
+                print("=" * 60)
+                print("DRY RUN FINISHED - nothing was uploaded and nothing was recorded.")
+                print("=" * 60)
                 return
             else:
                 print("No viral video met criteria, falling back to original Persian fact pool...")
@@ -121,9 +129,6 @@ def main():
             print("!" * 60)
             print("VIRAL TURN SKIPPED - YOUTUBE BLOCKED THE DOWNLOAD ON THIS MACHINE")
             print(e)
-            print("This is the 'Sign in to confirm you're not a bot' block that hits")
-            print("GitHub/AWS datacenter IPs. Add the YT_COOKIES_B64 secret, or run")
-            print("`python viral_hunter.py --once` on your own PC/server.")
             print("Falling back to the fact pool so the channel still gets its video.")
             print("!" * 60)
         except Exception as e:
