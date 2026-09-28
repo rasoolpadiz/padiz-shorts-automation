@@ -208,6 +208,12 @@ def cookies_file():
 # token automatically. Cookies and YT_PROXY are used as well when present, and
 # the different internal player clients are tried in turn as a fallback.
 DOWNLOAD_ATTEMPTS = [
+    # The plain web client is the one that consumes a proof-of-origin token, so
+    # it must be tried first; without it yt-dlp silently falls back to clients
+    # that YouTube answers with the bot check.
+    ("web", ["web"]),
+    ("mweb", ["mweb"]),
+    ("tv", ["tv"]),
     ("default", None),
     ("android+web_safari", ["android", "web_safari"]),
     ("tv_embedded", ["tv_embedded"]),
@@ -215,8 +221,6 @@ DOWNLOAD_ATTEMPTS = [
     ("android_vr", ["android_vr"]),
     ("web_creator", ["web_creator"]),
     ("ios", ["ios"]),
-    ("mweb", ["mweb"]),
-    ("tv", ["tv"]),
 ]
 
 

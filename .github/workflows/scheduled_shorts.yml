@@ -53,15 +53,32 @@ jobs:
         run: |
           docker run --name bgutil-provider -d --init --shm-size=1g \
             -p 127.0.0.1:4416:4416 brainicism/bgutil-ytdlp-pot-provider
+          echo "--- waiting for the provider to come up ---"
           for i in $(seq 1 30); do
-            if curl -s -o /dev/null http://127.0.0.1:4416/; then break; fi
+            if curl -s -o /dev/null http://127.0.0.1:4416/; then echo "up after $i tries"; break; fi
             sleep 2
           done
-          echo "--- POT provider log ---"
-          docker logs bgutil-provider 2>&1 | tail -10
-          echo "--- providers seen by yt-dlp ---"
-          python -m yt_dlp -v --simulate "https://www.youtube.com/watch?v=jNQXAC9IVRw" 2>&1 \
-            | grep -i "pot" | head -5 || true
+          docker logs bgutil-provider 2>&1 | tail -5
+          echo "--- warm-up: first metadata fetch with the web client + PO token ---"
+          ok=0
+          for i in 1 2 3 4 5; do
+            if python -m yt_dlp --skip-download --no-warnings -v \
+                 --extractor-args "youtube:player_client=web" \
+                 "https://www.youtube.com/watch?v=jNQXAC9IVRw" 2>pot_warmup.txt; then
+              echo "warm-up OK on attempt $i"
+              ok=1
+              break
+            fi
+            echo "warm-up attempt $i failed, retrying in 15s ..."
+            sleep 15
+          done
+          echo "--- PO token lines from the warm-up ---"
+          grep -iE "pot|token" pot_warmup.txt | head -20 || true
+          echo "--- tail of the warm-up log ---"
+          tail -6 pot_warmup.txt || true
+          if [ "$ok" != "1" ]; then
+            echo "::warning::PO-token warm-up did not succeed; the viral download may be refused"
+          fi
 
       - name: Run automated Shorts pipeline
         env:
