@@ -233,8 +233,8 @@ GEMINI_TTS_MODELS = [
 # Male voice for Farid-style slides, female voice for Dilara-style slides.
 # Persian narration uses Gemini voices that render Farsi most naturally; English
 # uses the classic upbeat pair. Override the Persian ones with GEMINI_FA_VOICE.
-GEMINI_FA_VOICE = os.environ.get("GEMINI_FA_VOICE", "").strip() or "Charon"
-GEMINI_FA_VOICE_ALT = os.environ.get("GEMINI_FA_VOICE_ALT", "").strip() or "Despina"
+GEMINI_FA_VOICE = os.environ.get("GEMINI_FA_VOICE", "").strip() or "Orus"
+GEMINI_FA_VOICE_ALT = os.environ.get("GEMINI_FA_VOICE_ALT", "").strip() or "Orus"
 GEMINI_VOICE_BY_EDGE = {
     "fa-IR-FaridNeural": GEMINI_FA_VOICE,
     "fa-IR-DilaraNeural": GEMINI_FA_VOICE_ALT,
