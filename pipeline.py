@@ -413,6 +413,7 @@ def generate_voice_gemini(text: str, output_path: str, voice_name: str = None) -
                     return inline.data
         return None
 
+    quota_hit = False
     for model_name in [m for m in GEMINI_TTS_MODELS if m]:
         speech_config = gemini_speech_config(model_name, voice_name)
         for variant_index, contents in enumerate(contents_variants):
@@ -421,9 +422,11 @@ def generate_voice_gemini(text: str, output_path: str, voice_name: str = None) -
             except Exception as e:
                 print(f"[Gemini TTS] {model_name} variant {variant_index} failed: {e}")
                 if _is_quota_gemini_error(e):
-                    print("[Gemini TTS] quota exhausted - using edge-tts for this run.")
-                    _disable_gemini_voice()
-                    return False
+                    # Daily quota of THIS model is gone - other models still
+                    # have their own free quota, so keep trying them. Gemini
+                    # is only switched off when nothing is left at all.
+                    quota_hit = True
+                    break                     # same quota for both variants
                 if _is_fatal_gemini_error(e):
                     print("[Gemini TTS] API key rejected - using edge-tts for this run.")
                     _disable_gemini_voice()
@@ -439,7 +442,10 @@ def generate_voice_gemini(text: str, output_path: str, voice_name: str = None) -
             print(f"[Gemini TTS] {model_name} returned audio FFmpeg could not convert.")
 
     # No model produced audio: stop trying for the remaining slides of this run.
-    print("[Gemini TTS] No Gemini model returned audio - using edge-tts for this run.")
+    if quota_hit:
+        print("[Gemini TTS] all model quotas exhausted - using edge-tts for this run.")
+    else:
+        print("[Gemini TTS] No Gemini model returned audio - using edge-tts for this run.")
     _disable_gemini_voice()
     return False
 
