@@ -274,6 +274,19 @@ FATAL_GEMINI_ERROR_MARKERS = (
     "permission denied",
 )
 
+# Errors that mean "quota is gone for now" - one process must not produce a
+# video narrated half by Gemini and half by edge-tts, so the first quota hit
+# switches the whole run to the fallback voice.
+QUOTA_GEMINI_ERROR_MARKERS = (
+    "quota",
+    "resource_exhausted",
+    "resource exhausted",
+    "rate_limit",
+    "rate limit",
+    "generate_content_free_tier",
+    "429",
+)
+
 
 def gemini_voice_enabled() -> bool:
     """Gemini narration is used unless it is switched off by env or a prior failure."""
@@ -285,6 +298,11 @@ def gemini_voice_enabled() -> bool:
 def _is_fatal_gemini_error(exc: Exception) -> bool:
     message = str(exc).lower()
     return any(marker in message for marker in FATAL_GEMINI_ERROR_MARKERS)
+
+
+def _is_quota_gemini_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return any(marker in message for marker in QUOTA_GEMINI_ERROR_MARKERS)
 
 
 def _disable_gemini_voice():
@@ -402,6 +420,10 @@ def generate_voice_gemini(text: str, output_path: str, voice_name: str = None) -
                 raw_audio = attempt(model_name, speech_config, contents)
             except Exception as e:
                 print(f"[Gemini TTS] {model_name} variant {variant_index} failed: {e}")
+                if _is_quota_gemini_error(e):
+                    print("[Gemini TTS] quota exhausted - using edge-tts for this run.")
+                    _disable_gemini_voice()
+                    return False
                 if _is_fatal_gemini_error(e):
                     print("[Gemini TTS] API key rejected - using edge-tts for this run.")
                     _disable_gemini_voice()
@@ -427,6 +449,10 @@ def generate_voice(text: str, voice: str, output_path: str):
 
     Tries Google AI Studio (Gemini) audio generation first for natural Persian
     speech, and falls back to edge-tts whenever that is unavailable or fails.
+    Every failure (not just a rejected key) disables Gemini for the rest of the
+    process, so one video is never narrated half by one engine and half by
+    the other - with the free TTS quota this small, partial runs are the norm,
+    not the exception.
     """
     try:
         gemini_voice = gemini_voice_for(voice)
@@ -461,20 +487,49 @@ def _detect_silences(audio_path: str, noise_db: int = -35, min_dur: float = 0.25
     return spans
 
 
-def split_audio_by_silence(audio_path: str, parts: int, out_paths: list) -> bool:
-    """Cut one narration track into `parts` clips at the longest internal pauses."""
+def split_audio_by_silence(audio_path: str, parts: int, out_paths: list, weights: list = None) -> bool:
+    """Cut one narration track into `parts` clips at pauses.
+
+    `weights` = relative size of each part (e.g. character counts of the source
+    texts). Cut points are then chosen near the *expected* boundaries instead of
+    simply taking the longest pauses, which often land mid-scene and silently
+    desync narration from slides.
+    """
     if parts <= 1:
         shutil.copy2(audio_path, out_paths[0])
         return True
 
-    spans = [s for s in _detect_silences(audio_path) if s[1] - s[0] >= 0.25]
+    spans = [s for s in _detect_silences(audio_path) if s[1] - s[0] >= 0.18]
     if len(spans) < parts - 1:
         return False
 
-    # Longest pauses are the sentence/slide boundaries.
-    ranked = sorted(spans, key=lambda s: (s[1] - s[0]), reverse=True)[: parts - 1]
-    cuts = sorted((s[0] + s[1]) / 2.0 for s in ranked)
     total = get_audio_duration(audio_path)
+    mids = sorted((s[0] + s[1]) / 2.0 for s in spans)
+
+    if weights and len(weights) >= parts and sum(weights[:parts]) > 0:
+        w = [max(float(x), 1.0) for x in weights[:parts]]
+        w_sum = sum(w)
+        targets, acc = [], 0.0
+        for x in w[:-1]:
+            acc += x
+            targets.append(total * acc / w_sum)
+    else:
+        # Fallback: longest pauses, evenly ranked.
+        ranked = sorted(spans, key=lambda s: (s[1] - s[0]), reverse=True)[: parts - 1]
+        targets = sorted((s[0] + s[1]) / 2.0 for s in ranked)
+
+    # Greedy nearest-silence per target, keeping cuts ordered and sane.
+    cuts, prev = [], 0.0
+    for i, target in enumerate(targets):
+        remaining = parts - 1 - i          # cuts still needed after this one
+        lo = prev + 1.0
+        hi = total - (remaining + 1) * 1.0
+        candidates = [m for m in mids if lo <= m <= hi]
+        if not candidates:
+            return False
+        cut = min(candidates, key=lambda m: abs(m - target))
+        cuts.append(cut)
+        prev = cut
 
     bounds = [0.0] + cuts + [total]
     try:
@@ -510,7 +565,8 @@ def generate_voice_batch(texts: list, voice: str, out_paths: list) -> bool:
     try:
         if not generate_voice_gemini(combined, tmp_mp3, voice_name=gemini_voice):
             return False
-        if split_audio_by_silence(tmp_mp3, len(out_paths), out_paths):
+        if split_audio_by_silence(tmp_mp3, len(out_paths), out_paths,
+                                  weights=[len(t.strip()) for t in texts]):
             print(f"[voice] one-shot Gemini narration split into {len(out_paths)} clips "
                   f"(voice={gemini_voice})")
             return True
