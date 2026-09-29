@@ -12,7 +12,12 @@ import base64
 from datetime import datetime, timezone
 from topics_pool import FACTS_POOL
 import pipeline
-import viral_hunter
+try:
+    from topics_pool_en import FACTS_POOL_EN
+    HAS_EN = True
+except ImportError:
+    FACTS_POOL_EN = []
+    HAS_EN = False
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 POSTED_FILE = os.path.join(BASE_DIR, "posted_shorts.json")
@@ -106,50 +111,40 @@ def main():
             print("Nothing to do - safe exit.")
             return
 
-    # Alternating mode: Check how many items were posted.
-    # Every 2nd run, try to hunt a Global Viral video! If not found, fallback to facts pool.
+    # Alternating mode: FA run <-> EN run.
+    # EN replaces the old viral-downloader: same self-made style, English audience.
+    # Odd total_posted -> EN turn; even -> FA turn (FA pool untouched).
+    def pick_from(pool, posted_records):
+        posted_ids = {r["id"] for r in posted_records}
+        for item in pool:
+            if item["id"] not in posted_ids:
+                return dict(item, lang="en" if pool is FACTS_POOL_EN else "fa")
+        last_posted = {}
+        for record in posted_records:
+            tid = record.get("id")
+            st = record.get("posted_at") or ""
+            if tid not in last_posted or st > last_posted[tid]:
+                last_posted[tid] = st
+        print("Pool exhausted - recycling oldest topic...")
+        best = min(pool, key=lambda it: last_posted.get(it["id"], ""))
+        return dict(best, lang="en" if pool is FACTS_POOL_EN else "fa")
+
     total_posted = len(posted_records)
-    viral_published = False
+    force_lang = (os.environ.get("FORCE_LANG") or "").strip().lower()
+    if force_lang in ("fa", "en"):
+        is_en_turn = (force_lang == "en")
+    else:
+        is_en_turn = (total_posted % 2 == 1)
+    if is_en_turn and not HAS_EN:
+        print("English pool missing - falling back to Persian pool.")
+        is_en_turn = False
 
-    if total_posted % 2 == 1 or dry_run:
-        print("Scheduled turn for Global Viral Hunter! Scanning viral trends...")
-        if dry_run:
-            print("(VIRAL_DRY_RUN=1: find + download + brand only, no upload at all)")
-        try:
-            viral_url = viral_hunter.run_viral_hunter_job(dry_run=dry_run)
-            if viral_url and not dry_run:
-                viral_published = True
-                save_posted(f"viral_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}", viral_url)
-                print("Global Viral Short successfully published.")
-                return
-            elif dry_run:
-                print("=" * 60)
-                print("DRY RUN FINISHED - nothing was uploaded, nothing was recorded.")
-                print("=" * 60)
-                return
-            else:
-                print("No viral video met criteria, falling back to original Persian fact pool...")
-        except viral_hunter.ViralDownloadBlocked as e:
-            print("!" * 60)
-            print("VIRAL TURN SKIPPED - YOUTUBE BLOCKED THE DOWNLOAD ON THIS MACHINE")
-            print(e)
-            if dry_run:
-                print("Dry run: no fallback video is published either.")
-                print("!" * 60)
-                return
-            print("Falling back to the fact pool so the channel still gets its video.")
-            print("!" * 60)
-        except Exception as e:
-            print("!" * 60)
-            print(f"VIRAL HUNTER ERROR ({type(e).__name__}): {e}")
-            if dry_run:
-                print("Dry run: no fallback video is published either.")
-                print("!" * 60)
-                return
-            print("Falling back to the fact pool so the channel still gets its video.")
-            print("!" * 60)
-
-    candidate = pick_next_topic(posted_records)
+    if is_en_turn:
+        print("EN turn: rendering self-made English Short (viral downloader retired)...")
+        candidate = pick_from(FACTS_POOL_EN, posted_records)
+    else:
+        print("FA turn: rendering Persian Short...")
+        candidate = pick_from(FACTS_POOL, posted_records)
 
     print(f"Selected topic: {candidate['title']} (ID: {candidate['id']})")
     out_video = os.path.join(BASE_DIR, f"short_{candidate['id']}.mp4")
@@ -157,6 +152,14 @@ def main():
     print("Rendering video...")
     rendered_path = pipeline.build_full_short(candidate, out_video)
     print("Video rendered at:", rendered_path)
+
+    # EN only: mix the per-theme bed (FA uploads exactly as rendered).
+    try:
+        track = pipeline.bg_track_for(candidate)
+        if track:
+            rendered_path = pipeline.mix_bg_music(rendered_path, lang=candidate.get("lang", ""), track=track)
+    except Exception as e:
+        print(f"[music] auto-mix skipped ({e})")
 
     print("Uploading to YouTube channel @padiz...")
     short_url = pipeline.upload_to_youtube(

@@ -5,6 +5,7 @@ import asyncio
 import subprocess
 import pickle
 import re
+import tempfile
 from PIL import Image, ImageDraw, ImageFont
 from PIL import features as pil_features
 import arabic_reshaper
@@ -13,9 +14,55 @@ import edge_tts
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
+try:
+    from google import genai
+    from google.genai import types as genai_types
+    HAS_GENAI = True
+
+    # The SDK logs a "direct use of automatic function calling is not recommended"
+    # warning for plain generate_content calls even though we never register tools;
+    # raise the level so the automation logs stay readable.
+    import logging
+    logging.getLogger("google_genai.models").setLevel(logging.ERROR)
+except ImportError:
+    genai = None
+    genai_types = None
+    HAS_GENAI = False
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FONT_PATH = os.path.join(BASE_DIR, "Vazirmatn-Bold.ttf")
+FONT_EN_CANDIDATES = [
+    os.path.join(BASE_DIR, "DejaVuSans-Bold.ttf"),
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "C:\\Windows\\Fonts\\arialbd.ttf",
+    "C:\\Windows\\Fonts\\Arial.ttf",
+]
+FONT_EN_PATH = next((p for p in FONT_EN_CANDIDATES if os.path.exists(p)), FONT_PATH)
 TOKEN_PATH = os.path.join(BASE_DIR, "token.pickle")
+
+FA_CHAR_RE = re.compile(r'[\u0600-\u06FF]')
+
+
+def is_fa_text(text: str) -> bool:
+    return bool(FA_CHAR_RE.search(text or ""))
+
+
+def font_for(text: str, size: int):
+    """Latin font for English, Vazirmatn for Persian."""
+    path = FONT_PATH if is_fa_text(text) else FONT_EN_PATH
+    try:
+        return ImageFont.truetype(path, size)
+    except Exception:
+        return ImageFont.truetype(FONT_PATH, size)
+
+
+def draw_smart(draw, xy, text: str, font, fill, anchor: str = "mm"):
+    """RTL shaping for Persian, plain LTR for English."""
+    if is_fa_text(text):
+        draw_persian(draw, xy, text, font, fill, anchor=anchor)
+    else:
+        clean = re.sub(r'[\U00010000-\U0010ffff]', '', text or '').strip()
+        draw.text(xy, clean, font=font, fill=fill, anchor=anchor)
 
 # Pillow builds that ship libraqm already run HarfBuzz (letter joining) and
 # FriBidi (right-to-left reordering) internally, so feeding them text that was
@@ -49,33 +96,75 @@ def draw_persian(draw, xy, text: str, font, fill, anchor: str = "mm"):
         kwargs["language"] = "fa"
     draw.text(xy, prepare_bidi_text(text), **kwargs)
 
-def create_slide_image(category: str, title: str, text: str, slide_num: int, total_slides: int, output_path: str):
+def create_slide_image(category: str, title: str, text: str, slide_num: int, total_slides: int, output_path: str, lang: str = None):
+    # Theme per language: FA keeps the EXACT legacy look, EN gets its own
+    # identity so viewers instantly tell them apart on the channel grid.
+    lang_pinned = (lang or "").strip().lower()
+    if lang_pinned.startswith("en"):
+        en_mode = True
+    elif lang_pinned.startswith("fa"):
+        en_mode = False
+    else:
+        en_mode = not is_fa_text(f"{title} {text}")
+
+    if en_mode:
+        # EN identity: deep ocean-teal + cyan accent (vs FA navy + gold/red).
+        THEME = {
+            "bg": (4, 26, 34),
+            "topbar": (34, 211, 238),
+            "card_fill": (8, 47, 60),
+            "card_outline": (14, 116, 144),
+            "title": (103, 232, 249),
+            "divider": (21, 100, 120),
+            "body": (236, 253, 255),
+            "badge": (125, 211, 252),
+            "progress": (125, 211, 252),
+            "btn": (6, 182, 212),
+            "btn_text": (255, 255, 255),
+        }
+    else:
+        # FA legacy theme - DO NOT TOUCH (Persian look stays pixel-identical).
+        THEME = {
+            "bg": (15, 23, 42),
+            "topbar": (239, 68, 68),
+            "card_fill": (30, 41, 59),
+            "card_outline": (51, 65, 85),
+            "title": (250, 204, 21),
+            "divider": (71, 85, 105),
+            "body": (241, 245, 249),
+            "badge": (148, 163, 184),
+            "progress": (148, 163, 184),
+            "btn": (220, 38, 38),
+            "btn_text": (255, 255, 255),
+        }
+
     width, height = 1080, 1920
-    img = Image.new("RGB", (width, height), color=(15, 23, 42))
+    img = Image.new("RGB", (width, height), color=THEME["bg"])
     draw = ImageDraw.Draw(img)
 
-    draw.rectangle([(0, 0), (width, 24)], fill=(239, 68, 68))
+    draw.rectangle([(0, 0), (width, 24)], fill=THEME["topbar"])
 
-    badge_font = ImageFont.truetype(FONT_PATH, 38)
     badge_label = f"{category} | Padiz Studio" if category else "Padiz Studio"
-    draw_persian(draw, (width // 2, 220), badge_label, badge_font, (148, 163, 184))
+    badge_font = font_for(badge_label, 38)
+    draw_smart(draw, (width // 2, 220), badge_label, badge_font, THEME["badge"])
 
     card_margin = 70
     card_top = 400
     card_bottom = 1500
-    draw.rounded_rectangle([(card_margin, card_top), (width - card_margin, card_bottom)], radius=40, fill=(30, 41, 59), outline=(51, 65, 85), width=4)
+    draw.rounded_rectangle([(card_margin, card_top), (width - card_margin, card_bottom)], radius=40, fill=THEME["card_fill"], outline=THEME["card_outline"], width=4)
 
-    title_font = ImageFont.truetype(FONT_PATH, 54)
-    draw_persian(draw, (width // 2, card_top + 130), title, title_font, (250, 204, 21))
+    title_font = font_for(title, 54)
+    draw_smart(draw, (width // 2, card_top + 130), title, title_font, THEME["title"])
 
-    draw.line([(card_margin + 60, card_top + 210), (width - card_margin - 60, card_top + 210)], fill=(71, 85, 105), width=2)
+    draw.line([(card_margin + 60, card_top + 210), (width - card_margin - 60, card_top + 210)], fill=THEME["divider"], width=2)
 
-    content_font = ImageFont.truetype(FONT_PATH, 46)
+    content_font = font_for(text, 46)
+    max_chars = 22 if is_fa_text(text) else 30
     words = text.split()
     lines, curr_line = [], []
     for word in words:
         test_line = " ".join(curr_line + [word])
-        if len(test_line) > 26:
+        if len(test_line) > max_chars:
             lines.append(" ".join(curr_line))
             curr_line = [word]
         else:
@@ -89,20 +178,259 @@ def create_slide_image(category: str, title: str, text: str, slide_num: int, tot
 
     for i, line in enumerate(lines):
         y = start_y + (i * line_height)
-        draw_persian(draw, (width // 2, y), line, content_font, (241, 245, 249))
+        draw_smart(draw, (width // 2, y), line, content_font, THEME["body"])
 
-    progress_font = ImageFont.truetype(FONT_PATH, 34)
-    draw_persian(draw, (width // 2, card_bottom - 70), f"نکته {slide_num} از {total_slides}", progress_font, (148, 163, 184))
+    progress_font = font_for("test", 34)
+    progress_txt = f"Fact {slide_num} of {total_slides}" if en_mode else f"نکته {slide_num} از {total_slides}"
+    draw_smart(draw, (width // 2, card_bottom - 70), progress_txt, progress_font, THEME["progress"])
 
-    sub_font = ImageFont.truetype(FONT_PATH, 42)
-    draw.rounded_rectangle([(140, 1620), (width - 140, 1740)], radius=30, fill=(220, 38, 38))
-    draw_persian(draw, (width // 2, 1680), "کانال رو سابسکرایب کنید تا ویدیوهای جدید رو از دست ندید", sub_font, (255, 255, 255))
+    sub_font = font_for("Subscribe", 42)
+    draw.rounded_rectangle([(140, 1620), (width - 140, 1740)], radius=30, fill=THEME["btn"])
+    sub_txt = "Subscribe so you never miss new videos!" if en_mode else "کانال رو سابسکرایب کنید تا ویدیوهای جدید رو از دست ندید"
+    draw_smart(draw, (width // 2, 1680), sub_txt, sub_font, THEME["btn_text"])
 
     img.save(output_path, quality=95)
 
-async def generate_speech(text: str, voice: str, output_path: str):
+async def generate_voice_edge(text: str, voice: str, output_path: str):
+    """Fallback Persian TTS using edge-tts."""
     communicator = edge_tts.Communicate(text, voice, rate="+5%", pitch="+0Hz")
     await communicator.save(output_path)
+
+# Gemini reads whatever text it is given out loud, so the narration must be sent
+# verbatim (wrapping it in "read this aloud: ..." can make the instruction end up
+# in the audio). Delivery is steered with the speech style metadata instead.
+GEMINI_STYLE_FA = (
+    "Natural, warm and expressive Persian narration for a short documentary video, "
+    "with clear pronunciation and a conversational tone"
+)
+GEMINI_STYLE_EN = (
+    "Natural, energetic and expressive American English narration for a viral Shorts video, "
+    "clear pronunciation, upbeat conversational tone"
+)
+
+# Dedicated TTS models first (most natural Persian delivery), then general models
+# that also accept the AUDIO response modality. The first model that answers wins;
+# unsupported ones raise and are skipped. Override with GEMINI_TTS_MODEL.
+#
+# Free-tier notes (ai.google.dev/gemini-api/docs/pricing): the *Flash* TTS models
+# are "Free of charge" on the free tier (their audio may be used to improve Google
+# products), while gemini-2.5-pro-preview-tts is "Not available" without billing -
+# hence it is tried last. Output audio is billed as 25 tokens per second when a
+# paid key is used.
+GEMINI_TTS_MODELS = [
+    os.environ.get("GEMINI_TTS_MODEL", "").strip(),
+    "gemini-3.8-flash-tts",             # newest free-tier TTS, best fidelity
+    "gemini-3.8-flash-lite-tts",        # free-tier TTS, cheapest
+    "gemini-2.5-flash-preview-tts",     # long-standing free-tier TTS
+    "gemini-2.0-flash",                 # general model with AUDIO modality
+    "gemini-2.5-flash",                 # general model with AUDIO modality
+    "gemini-2.5-pro-preview-tts",       # paid tier only (best steering)
+]
+
+# Male voice for Farid-style slides, female voice for Dilara-style slides.
+GEMINI_VOICE_BY_EDGE = {
+    "fa-IR-FaridNeural": "Puck",
+    "fa-IR-DilaraNeural": "Kore",
+    "en-US-GuyNeural": "Puck",
+    "en-US-JennyNeural": "Kore",
+    "en-US-AriaNeural": "Kore",
+}
+GEMINI_DEFAULT_VOICE = os.environ.get("GEMINI_TTS_VOICE", "").strip() or "Puck"
+
+# Edge voices: Persian default + English (kept separate so FA stays untouched).
+VOICES_FA = ["fa-IR-FaridNeural", "fa-IR-DilaraNeural"]
+VOICES_EN = ["en-US-GuyNeural", "en-US-JennyNeural"]
+VOICES = VOICES_FA  # legacy alias
+
+
+def voices_for(topic_data: dict) -> list:
+    lang = (topic_data.get("lang") or ("en" if not is_fa_text(
+        (topic_data.get("title") or "") + " " + str(
+            (topic_data.get("slides") or [{}])[0].get("speech", ""))) else "fa")).lower()
+    if lang.startswith("en"):
+        return VOICES_EN
+    return VOICES_FA
+
+# Once every model has failed inside one process there is no point paying the
+# network round-trips again for the next slide, so Gemini is switched off for
+# the rest of the run and edge-tts handles the remaining lines.
+_gemini_voice_disabled = False
+
+# Errors that mean "this key/account can never work" - retrying other models or
+# later slides would only waste time.
+FATAL_GEMINI_ERROR_MARKERS = (
+    "api key not valid",
+    "api_key_invalid",
+    "api key expired",
+    "unauthenticated",
+    "permission_denied",
+    "permission denied",
+)
+
+
+def gemini_voice_enabled() -> bool:
+    """Gemini narration is used unless it is switched off by env or a prior failure."""
+    if _gemini_voice_disabled:
+        return False
+    return os.environ.get("DISABLE_GEMINI_VOICE", "").strip().lower() not in ("1", "true", "yes", "on")
+
+
+def _is_fatal_gemini_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return any(marker in message for marker in FATAL_GEMINI_ERROR_MARKERS)
+
+
+def _disable_gemini_voice():
+    """Switch narration to edge-tts for the rest of this process."""
+    global _gemini_voice_disabled
+    _gemini_voice_disabled = True
+
+
+def gemini_voice_for(edge_voice: str) -> str:
+    """Map an edge-tts voice name onto a compatible Gemini prebuilt voice."""
+    if os.environ.get("GEMINI_TTS_VOICE", "").strip():
+        return GEMINI_DEFAULT_VOICE
+    return GEMINI_VOICE_BY_EDGE.get(edge_voice, GEMINI_DEFAULT_VOICE)
+
+
+def gemini_speech_config(model_name: str, voice_name: str):
+    """Build the speech config for a model.
+
+    Newer (gemini-3.x) models document ``voice_config.voice`` while older ones use
+    the nested ``prebuilt_voice_config``; the installed SDK accepts both.
+    """
+    if model_name.startswith("gemini-3"):
+        voice_config = genai_types.VoiceConfig(voice=voice_name)
+    else:
+        voice_config = genai_types.VoiceConfig(
+            prebuilt_voice_config=genai_types.PrebuiltVoiceConfig(voice_name=voice_name)
+        )
+    return genai_types.SpeechConfig(voice_config=voice_config)
+
+
+def _gemini_audio_to_mp3(raw_audio: bytes, output_path: str) -> bool:
+    """Write raw Gemini audio (WAV container or raw 24 kHz PCM) out as an MP3."""
+    is_wav = raw_audio[:4] == b"RIFF" and b"WAVE" in raw_audio[:16]
+
+    with tempfile.NamedTemporaryFile(suffix=".wav" if is_wav else ".pcm", delete=False) as tf:
+        tf.write(raw_audio)
+        temp_audio_file = tf.name
+
+    try:
+        if is_wav:
+            # The WAV container already carries its own sample format.
+            ffmpeg_cmd = ["ffmpeg", "-y", "-i", temp_audio_file]
+        else:
+            # Raw PCM: 16-bit little-endian mono @ 24 kHz (Gemini L16 default).
+            ffmpeg_cmd = ["ffmpeg", "-y", "-f", "s16le", "-ar", "24000", "-ac", "1",
+                          "-i", temp_audio_file]
+
+        ffmpeg_cmd += ["-c:a", "libmp3lame", "-b:a", "192k", output_path]
+        subprocess.run(ffmpeg_cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return os.path.exists(output_path) and os.path.getsize(output_path) > 1000
+    finally:
+        if os.path.exists(temp_audio_file):
+            try:
+                os.remove(temp_audio_file)
+            except OSError:
+                pass
+
+
+def generate_voice_gemini(text: str, output_path: str, voice_name: str = None) -> bool:
+    """Generate natural Persian narration using Google AI Studio (Gemini audio output).
+
+    Returns True when an MP3 was written to ``output_path``, and False when Gemini
+    is unavailable (no API key / SDK missing) or produced nothing usable, so the
+    caller can fall back to edge-tts.
+    """
+    api_key = (os.environ.get("GEMINI_API_KEY") or "").strip()
+    if not api_key or not HAS_GENAI or not gemini_voice_enabled():
+        return False
+
+    voice_name = voice_name or GEMINI_DEFAULT_VOICE
+    client = genai.Client(api_key=api_key)
+    style = GEMINI_STYLE_EN if not is_fa_text(text) else GEMINI_STYLE_FA
+
+    # Styled part first (steers delivery), then the bare text as a safety net for
+    # models/SDK versions that reject the style metadata.
+    contents_variants = [
+        [
+            genai_types.Content(
+                role="user",
+                parts=[
+                    genai_types.Part(
+                        text=text,
+                        speech_metadata=genai_types.SpeechMetadata(style=style),
+                    )
+                ],
+            )
+        ],
+        text,
+    ]
+
+    def attempt(model_name, speech_config, contents):
+        """Run one request; returns raw audio bytes, or None when unusable."""
+        config = genai_types.GenerateContentConfig(
+            response_modalities=["AUDIO"],
+            speech_config=speech_config,
+        )
+        response = client.models.generate_content(
+            model=model_name,
+            contents=contents,
+            config=config,
+        )
+        for candidate in (response.candidates or []):
+            if not candidate.content or not candidate.content.parts:
+                continue
+            for part in candidate.content.parts:
+                inline = getattr(part, "inline_data", None)
+                if inline is not None and getattr(inline, "data", None):
+                    return inline.data
+        return None
+
+    for model_name in [m for m in GEMINI_TTS_MODELS if m]:
+        speech_config = gemini_speech_config(model_name, voice_name)
+        for variant_index, contents in enumerate(contents_variants):
+            try:
+                raw_audio = attempt(model_name, speech_config, contents)
+            except Exception as e:
+                print(f"[Gemini TTS] {model_name} variant {variant_index} failed: {e}")
+                if _is_fatal_gemini_error(e):
+                    print("[Gemini TTS] API key rejected - using edge-tts for this run.")
+                    _disable_gemini_voice()
+                    return False
+                continue
+
+            if not raw_audio:
+                continue
+
+            if _gemini_audio_to_mp3(raw_audio, output_path):
+                print(f"[Gemini TTS] {model_name} (voice={voice_name}) -> {output_path}")
+                return True
+            print(f"[Gemini TTS] {model_name} returned audio FFmpeg could not convert.")
+
+    # No model produced audio: stop trying for the remaining slides of this run.
+    print("[Gemini TTS] No Gemini model returned audio - using edge-tts for this run.")
+    _disable_gemini_voice()
+    return False
+
+
+def generate_voice(text: str, voice: str, output_path: str):
+    """Narrate ``text`` into ``output_path`` as an MP3.
+
+    Tries Google AI Studio (Gemini) audio generation first for natural Persian
+    speech, and falls back to edge-tts whenever that is unavailable or fails.
+    """
+    try:
+        gemini_voice = gemini_voice_for(voice)
+        if generate_voice_gemini(text, output_path, voice_name=gemini_voice):
+            print(f"[voice] Generated with Google AI Studio (Gemini voice: {gemini_voice})")
+            return
+        print("[voice] Gemini voice unavailable -> falling back to edge-tts.")
+    except Exception as e:
+        print(f"[voice] Gemini voice error ({e}) -> falling back to edge-tts.")
+
+    asyncio.run(generate_voice_edge(text, voice, output_path))
 
 def get_audio_duration(file_path: str) -> float:
     cmd = [
@@ -113,8 +441,6 @@ def get_audio_duration(file_path: str) -> float:
     res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
     return float(res.stdout.strip())
 
-VOICES = ["fa-IR-FaridNeural", "fa-IR-DilaraNeural"]
-
 def build_full_short(topic_data: dict, output_filename: str):
     work_dir = os.path.join(BASE_DIR, "temp_render")
     os.makedirs(work_dir, exist_ok=True)
@@ -123,23 +449,26 @@ def build_full_short(topic_data: dict, output_filename: str):
           f"{'Pillow/Raqm' if HAS_RAQM else 'arabic_reshaper + python-bidi'}")
 
     category = topic_data.get("category", "")
+    topic_lang = (topic_data.get("lang") or "").strip().lower()
     slides = topic_data["slides"]
     total = len(slides)
     clip_files = []
 
     # Support explicit voice selection per topic or alternate voices per slide/topic
     base_voice_idx = topic_data.get("voice_index", 0)
+    lang_voices = voices_for(topic_data)
 
     for idx, slide in enumerate(slides, start=1):
         img_path = os.path.join(work_dir, f"slide_{idx}.png")
         audio_path = os.path.join(work_dir, f"slide_{idx}.mp3")
         clip_path = os.path.join(work_dir, f"clip_{idx}.mp4")
 
-        # Alternate between Farid (male) and Dilara (female)
-        voice = slide.get("voice") or VOICES[(base_voice_idx + idx - 1) % len(VOICES)]
+        # Alternate male/female per language pool
+        voice = slide.get("voice") or lang_voices[(base_voice_idx + idx - 1) % len(lang_voices)]
 
-        create_slide_image(category, slide["title"], slide["text"], idx, total, img_path)
-        asyncio.run(generate_speech(slide["speech"], voice, audio_path))
+        create_slide_image(category, slide["title"], slide["text"], idx, total, img_path, lang=topic_lang or None)
+        # Gemini (natural voice) with automatic edge-tts fallback.
+        generate_voice(slide["speech"], voice, audio_path)
         duration = get_audio_duration(audio_path) + 0.4
 
         ffmpeg_clip = [
@@ -171,6 +500,60 @@ def build_full_short(topic_data: dict, output_filename: str):
     ]
     subprocess.run(concat_cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return final_video_path
+
+BG_MUSIC_EN = os.path.join(BASE_DIR, "sad_aesthetic_bg.mp3")
+BG_MUSIC_DIR_EN = os.path.join(BASE_DIR, "music_en")
+BG_MUSIC_VOLUME = float(os.environ.get("BG_MUSIC_VOLUME", "0.18"))
+
+
+def bg_track_for(topic_data: dict) -> str:
+    """Per-theme bed for EN topics. FA returns '' (untouched, legacy track)."""
+    lang = (topic_data.get("lang") or "").strip().lower()
+    if not lang.startswith("en"):
+        return ""
+    mood = (topic_data.get("music") or "chill").strip().lower()
+    cand = os.path.join(BG_MUSIC_DIR_EN, f"en_{mood}.mp3")
+    if os.path.exists(cand) and os.path.getsize(cand) > 1000:
+        return cand
+    # fallback: any bed in the folder
+    try:
+        for f in sorted(os.listdir(BG_MUSIC_DIR_EN)):
+            p = os.path.join(BG_MUSIC_DIR_EN, f)
+            if f.endswith(".mp3") and os.path.getsize(p) > 1000:
+                return p
+    except Exception:
+        pass
+    return ""
+
+
+def mix_bg_music(video_path: str, lang: str = "", track: str = "") -> str:
+    """Mix soft background music under an EN video. FA untouched. Returns final path."""
+    if not (lang or "").strip().lower().startswith("en"):
+        return video_path
+    src = track or BG_MUSIC_EN
+    if not src or not os.path.exists(src) or os.path.getsize(src) < 1000:
+        print("[music] no bg music file - skipping mix")
+        return video_path
+    mixed_path = video_path.replace(".mp4", "_music.mp4")
+    try:
+        cmd = [
+            "ffmpeg", "-y", "-i", video_path,
+            "-stream_loop", "-1", "-i", src,
+            "-filter_complex",
+            f"[0:a]volume=1.0[a0];[1:a]volume={BG_MUSIC_VOLUME}[a1];"
+            "[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]",
+            "-map", "0:v", "-map", "[aout]",
+            "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest",
+            mixed_path,
+        ]
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if os.path.exists(mixed_path) and os.path.getsize(mixed_path) > 10000:
+            print(f"[music] mixed {os.path.basename(src)} ({BG_MUSIC_VOLUME}) -> {mixed_path}")
+            return mixed_path
+    except Exception as e:
+        print(f"[music] mix failed ({e}) - using dry voice")
+    return video_path
+
 
 def upload_to_youtube(video_path: str, title: str, description: str, tags: list, privacy_status="public"):
     with open(TOKEN_PATH, "rb") as token_file:

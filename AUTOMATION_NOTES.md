@@ -9,7 +9,8 @@ GitHub Actions (cron: 5 بار در روز)
         ├─ python run_daily.py
         │    ├─ انتخاب موضوع چرخشی از topics_pool.py (بر اساس posted_shorts.json)
         │    ├─ رندر اسلایدها با Pillow + فونت وزیرمتن  (pipeline.create_slide_image)
-        │    ├─ صدای گوینده فارسی با Edge-TTS
+        │    ├─ صدای طبیعی گوینده فارسی با Google AI Studio (Gemini)
+        │    │    └─ فالبک خودکار: Edge-TTS  (اگر کلید/مدل در دسترس نباشد)
         │    ├─ ترکیب با ffmpeg (1080x1920)
         │    └─ آپلود در یوتیوب با YouTube Data API v3  (سکرت YOUTUBE_TOKEN_B64)
         └─ کامیت و پوش posted_shorts.json  →  چرخش موضوع‌ها بین اجراها حفظ می‌شود
@@ -47,11 +48,117 @@ def prepare_bidi_text(text): ...   # فقط وقتی HAS_RAQM == False پیش‌
 def draw_persian(draw, xy, text, font, fill, anchor="mm"):  # direction="rtl" روی Raqm
 ```
 
+## صدای طبیعی فارسی (Google AI Studio / Gemini)
+
+گویندگی ویدیوها اول با مدل‌های صوتی Gemini (Google AI Studio) ساخته می‌شود و اگر
+در دسترس نباشد، به‌صورت خودکار روی Edge-TTS برمی‌گردد؛ یعنی انتشار ویدیو هرگز
+به دلیل مشکل صداسازی متوقف نمی‌شود.
+
+```python
+# pipeline.py
+generate_voice(text, edge_voice, out_mp3)          # نقطهٔ ورود اصلی (استفاده شده در build_full_short)
+  ├─ generate_voice_gemini(...)                     # اول: صدای طبیعی Gemini
+  │    └─ خروجی WAV/PCM → تبدیل با ffmpeg به MP3 استاندارد (192k)
+  └─ generate_voice_edge(...)                       # فالبک: Edge-TTS
+```
+
+**تنظیمات لازم در GitHub**: Settings → Secrets and variables → Actions →
+`GEMINI_API_KEY` (کلید رایگان از [aistudio.google.com](https://aistudio.google.com/apikey)).
+این سکرت در `scheduled_shorts.yml` به‌عنوان متغیر محیطی به اجرا پاس داده می‌شود.
+بدون این سکرت، همه‌چیز مثل قبل با Edge-TTS کار می‌کند.
+
+| متغیر محیطی | کاربرد |
+|---|---|
+| `GEMINI_API_KEY` | کلید Google AI Studio (بدون آن، فقط Edge-TTS) |
+| `GEMINI_TTS_MODEL` | اجبار به یک مدل خاص (مثلاً `gemini-2.5-flash-preview-tts`) |
+| `GEMINI_TTS_VOICE` | اجبار به یک صدای خاص (مثلاً `Puck` یا `Kore`) |
+| `DISABLE_GEMINI_VOICE=1` | خاموش کردن کامل Gemini و استفادهٔ همیشگی از Edge-TTS |
+
+ابزارها:
+
+```powershell
+python gemini_key_check.py AIzaSy...              # تست کلید: کدام مدل کار می‌کند و کیفیت صدا
+python set_github_secret.py <GITHUB_PAT> AIzaSy...  # ثبت خودکار سکرت GEMINI_API_KEY
+python voice_check.py                             # تست آفلاین کل مسیر صدا (بدون کلید)
+```
+
+نکات پیاده‌سازی:
+
+* مدل‌ها به این ترتیب امتحان می‌شوند (اولین پاسخ برنده است):
+  `gemini-3.8-flash-tts` → `gemini-3.8-flash-lite-tts` →
+  `gemini-2.5-flash-preview-tts` → `gemini-2.0-flash` → `gemini-2.5-flash` →
+  `gemini-2.5-pro-preview-tts`. سه مدل اول TTS اختصاصی و در پلن رایگان رایگان‌اند؛
+  مدل Pro فقط با Billing فعال کار می‌کند و آخر صف است.
+* متن دقیقاً همان‌طور که هست فرستاده می‌شود (بدون جمله‌ای مثل «این را بخوان»)
+  چون مدل TTS هر متنی که بگیرد را می‌خواند؛ لحن با `speech_metadata.style`
+  کنترل می‌شود. اگر مدل/نسخهٔ SDK این فیلد را نپذیرد، همان متن به‌شکل ساده دوباره
+  فرستاده می‌شود.
+* نگاشت صدا: `fa-IR-FaridNeural → Puck` (مرد) و `fa-IR-DilaraNeural → Kore` (زن).
+* اگر همهٔ مدل‌ها شکست بخورند یا کلید نامعتبر باشد، Gemini برای بقیهٔ همان اجرا
+  خاموش می‌شود تا وقت و درخواست تلف نشود (هر اجرا حداکثر یک دور تلاش).
+* توجه: اگر Gemini اسلاید اول را بسازد ولی برای اسلایدهای بعدی خطا بدهد،
+  اسلایدهای باقی‌مانده با Edge-TTS خوانده می‌شوند (صدای ویدیو یکدست نمی‌ماند).
+  برای ویدیوی یکدست، یا سکرت `GEMINI_API_KEY` را معتبر نگه دارید یا با
+  `DISABLE_GEMINI_VOICE=1` کاملاً روی Edge-TTS بمانید.
+
+## گرفتن کلید رایگان Google AI Studio (گام‌به‌گام)
+
+۱. با همان اکانت گوگل خودتان (همان که کانال یوتیوب با آن ساخته شده) وارد
+   [aistudio.google.com/apikey](https://aistudio.google.com/apikey) شوید.
+۲. شرایط استفاده (Terms) را بپذیرید. اگر قبلاً نپذیرفته‌اید، صفحه یک دکمهٔ
+   Accept نشان می‌دهد.
+۳. روی **Create API key** بزنید. اگر گزینهٔ انتخاب پروژه آمد،
+   **Create API key in new project** را بزنید (ساده‌ترین حالت).
+۴. کلیدی مثل `AIzaSy...` ساخته می‌شود؛ روی **Copy** بزنید و آن را در جای امن
+   نگه دارید (بعداً کامل نمایش داده نمی‌شود، ولی می‌توانید کلید جدید بسازید).
+۵. کلید را همین‌جا روی کامپیوتر تست کنید:
+   ```powershell
+   cd C:\youtube_pipeline
+   python gemini_key_check.py AIzaSy...        # نام مدل‌ها و خطاها را نشان می‌دهد
+   ```
+   اگر یکی از مدل‌ها ✓ گرفت، فایل `gemini_key_check.mp3` ساخته می‌شود؛ آن را
+   گوش کنید تا کیفیت صدای فارسی را بشنوید.
+۶. کلید را در گیت‌هاب به‌عنوان سکرت ثبت کنید — یا از طریق سایت:
+   `repo → Settings → Secrets and variables → Actions → New repository secret`
+   با نام دقیق **`GEMINI_API_KEY`** و مقدار کلید؛ یا با اسکریپت آماده:
+   ```powershell
+   python set_github_secret.py <GITHUB_PAT> AIzaSy...
+   ```
+   (توکن گیت‌هاب باید دسترسی `Secrets: read and write` داشته باشد.)
+۷. تمام. اجرای بعدی ورکفلو خودکار با صدای Gemini منتشر می‌کند. برای تست فوری:
+   `Actions → Padiz 24/7 Shorts Automation → Run workflow`.
+
+### پلن رایگان چه چیزی را پوشش می‌دهد؟
+
+بر اساس صفحهٔ قیمت‌گذاری گوگل (ai.google.dev/gemini-api/docs/pricing):
+
+| مدل | پلن رایگان | پلن پولی (هر ۱ میلیون توکن صوتی) |
+|---|---|---|
+| `gemini-3.8-flash-tts` | ✅ Free of charge | حدود $9 (معادل ~$0.00225 برای هر ۱۰ ثانیه صدا) |
+| `gemini-3.8-flash-lite-tts` | ✅ Free of charge | حدود $6 |
+| `gemini-2.5-flash-preview-tts` | ✅ Free of charge | $10 |
+| `gemini-2.5-pro-preview-tts` | ❌ فقط پولی | $20 |
+
+* برای همین کار ما (روزی ۵ ویدیو، هر کدام ~۱۵ ثانیه گفتار) پلن رایگان کاملاً کافی
+  است؛ فقط سهمیهٔ روزانه محدود است (مقدار دقیقش را در AI Studio →
+  «View your active rate limits» ببینید). هر صدا معادل ۲۵ توکن در هر ثانیه است.
+* در پلن رایگان، محتوای شما «برای بهبود محصولات گوگل» استفاده می‌شود (مثل
+  Edge-TTS که رایگان است). اگر این برایتان مهم است، یا Billing را فعال کنید
+  (هزینهٔ ماهانه در این حجم ناچیز است) یا با `DISABLE_GEMINI_VOICE=1` روی
+  Edge-TTS بمانید.
+* اگر کلید اشتباه/بدون دسترسی باشد، خطا در لاگ چاپ می‌شود و ویدیو با Edge-TTS
+  ساخته می‌شود؛ پس انتشار هرگز متوقف نمی‌شود.
+
 ## تأیید رندر (بدون مصرف سهمیه یوتیوب)
 
 ```powershell
 python render_check.py            # اسلایدهای نمونه در ./render_check/
+python voice_check.py             # تست آفلاین صدا (Gemini + فالبک Edge-TTS) در ./voice_check/
 ```
+
+`voice_check.py` بدون نیاز به کلید و بدون مصرف سهمیه، کل مسیر صدا را چک می‌کند:
+نگاشت صداها، تبدیل WAV/PCM مدل به MP3، فرستادن لحن (`speech_metadata`)،
+کار کردن فالبک Edge-TTS، و خاموش شدن خودکار Gemini بعد از خطای کلید.
 
 یا در ابر: Actions → **Persian Render Check** → Run workflow؛ خروجی هم به‌صورت
 آرتیفکت و هم در برنچ `cloud-render-check` منتشر می‌شود (لاگ محیط در

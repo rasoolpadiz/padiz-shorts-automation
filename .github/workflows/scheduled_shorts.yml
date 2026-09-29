@@ -15,6 +15,11 @@ on:
         description: "فقط تست (پیدا کردن + دانلود + برندینگ) بدون آپلود به یوتیوب"
         type: boolean
         default: false
+      force_lang:
+        description: "Force language: fa | en | empty=alternate"
+        type: choice
+        options: ["", fa, en]
+        default: ""
 
 permissions:
   contents: write
@@ -39,71 +44,24 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Install system dependencies (FFmpeg)
+      - name: Install system dependencies (FFmpeg + fonts)
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y ffmpeg fonts-dejavu-core
 
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Install Chrome (for the browser-based PO token provider)
-        uses: browser-actions/setup-chrome@v1
-
-      - name: Start YouTube PO-token provider (fixes "Sign in to confirm you're not a bot")
-        run: |
-          docker run --name bgutil-provider -d --init --shm-size=1g \
-            -p 127.0.0.1:4416:4416 brainicism/bgutil-ytdlp-pot-provider
-          echo "--- waiting for the provider to come up ---"
-          for i in $(seq 1 30); do
-            if curl -s -o /dev/null http://127.0.0.1:4416/; then echo "up after $i tries"; break; fi
-            sleep 2
-          done
-          docker logs bgutil-provider 2>&1 | tail -5
-          echo "--- warm-up: metadata fetch through a PO token (mweb is the recommended client) ---"
-          ok=0
-          for client in mweb web tv; do
-            for i in 1 2 3; do
-              if python -m yt_dlp --skip-download --no-warnings -v \
-                   --extractor-args "youtube:player_client=$client" \
-                   "https://www.youtube.com/watch?v=jNQXAC9IVRw" 2>pot_warmup.txt; then
-                echo "warm-up OK with client $client on attempt $i"
-                ok=1
-                break 2
-              fi
-              echo "warm-up ($client) attempt $i failed, retrying in 15s ..."
-              sleep 15
-            done
-          done
-          echo "--- PO token lines from the warm-up ---"
-          grep -iE "pot|token" pot_warmup.txt | head -20 || true
-          echo "--- tail of the warm-up log ---"
-          tail -6 pot_warmup.txt || true
-          if [ "$ok" != "1" ]; then
-            echo "::warning::PO-token warm-up did not succeed; the viral download may be refused"
-          fi
-
-      - name: Run automated Shorts pipeline
+      - name: Run automated Shorts pipeline (FA/EN self-made, no downloader)
         env:
           YOUTUBE_TOKEN_B64: ${{ secrets.YOUTUBE_TOKEN_B64 }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          # YouTube refuses yt-dlp downloads from datacenter IPs without a proof-of-origin
-          # token. The container started above provides it (no Google account needed).
-          # A cookie jar stays supported as a fallback: create it with
-          # `python make_cookies.py` and store the printed base64 as this secret.
-          YT_COOKIES_B64: ${{ secrets.YT_COOKIES_B64 }}
-          # test_only=true from the "Run workflow" button: no upload, no state change.
-          VIRAL_DRY_RUN: ${{ inputs.test_only && '1' || '0' }}
-          # Optional: restrict the viral hunter to Creative Commons videos.
-          # VIRAL_LICENSE: creativeCommon
+          # FORCE_LANG: fa | en | empty (empty = alternate FA/EN each run)
+          FORCE_LANG: ${{ inputs.force_lang || '' }}
         run: |
           python run_daily.py
-
-      - name: Stop PO-token provider
-        if: always()
-        run: docker rm -f bgutil-provider || true
 
       - name: Commit and push updated state
         run: |
