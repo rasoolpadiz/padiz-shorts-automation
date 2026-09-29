@@ -153,7 +153,8 @@ def main():
     rendered_path = pipeline.build_full_short(candidate, out_video)
     print("Video rendered at:", rendered_path)
 
-    # EN only: mix the per-theme bed (FA uploads exactly as rendered).
+    # Theme-matched bed for both languages (FA gets its own Persian-mood tracks,
+    # the old single sad track is retired).
     try:
         track = pipeline.bg_track_for(candidate)
         if track:

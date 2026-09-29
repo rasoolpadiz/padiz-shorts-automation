@@ -2,6 +2,7 @@
 import sys
 import json
 import asyncio
+import shutil
 import subprocess
 import pickle
 import re
@@ -200,8 +201,10 @@ async def generate_voice_edge(text: str, voice: str, output_path: str):
 # verbatim (wrapping it in "read this aloud: ..." can make the instruction end up
 # in the audio). Delivery is steered with the speech style metadata instead.
 GEMINI_STYLE_FA = (
-    "Natural, warm and expressive Persian narration for a short documentary video, "
-    "with clear pronunciation and a conversational tone"
+    "Native Iranian Persian (Farsi) narration for a short documentary video. "
+    "Speak Farsi with an authentic Tehrani accent, completely natural human intonation, "
+    "warm and expressive, conversational pace with gentle pauses between sentences. "
+    "Pronounce every Persian word correctly and never use an English or Arabic accent"
 )
 GEMINI_STYLE_EN = (
     "Natural, energetic and expressive American English narration for a viral Shorts video, "
@@ -228,9 +231,13 @@ GEMINI_TTS_MODELS = [
 ]
 
 # Male voice for Farid-style slides, female voice for Dilara-style slides.
+# Persian narration uses Gemini voices that render Farsi most naturally; English
+# uses the classic upbeat pair. Override the Persian ones with GEMINI_FA_VOICE.
+GEMINI_FA_VOICE = os.environ.get("GEMINI_FA_VOICE", "").strip() or "Charon"
+GEMINI_FA_VOICE_ALT = os.environ.get("GEMINI_FA_VOICE_ALT", "").strip() or "Despina"
 GEMINI_VOICE_BY_EDGE = {
-    "fa-IR-FaridNeural": "Puck",
-    "fa-IR-DilaraNeural": "Kore",
+    "fa-IR-FaridNeural": GEMINI_FA_VOICE,
+    "fa-IR-DilaraNeural": GEMINI_FA_VOICE_ALT,
     "en-US-GuyNeural": "Puck",
     "en-US-JennyNeural": "Kore",
     "en-US-AriaNeural": "Kore",
@@ -432,6 +439,87 @@ def generate_voice(text: str, voice: str, output_path: str):
 
     asyncio.run(generate_voice_edge(text, voice, output_path))
 
+def _detect_silences(audio_path: str, noise_db: int = -35, min_dur: float = 0.25):
+    """Return [(start, end)] silence spans reported by ffmpeg silencedetect."""
+    cmd = ["ffmpeg", "-hide_banner", "-nostats", "-i", audio_path,
+           "-af", f"silencedetect=noise={noise_db}dB:d={min_dur}", "-f", "null", "-"]
+    res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    spans, start = [], None
+    for line in (res.stderr or "").splitlines():
+        if "silence_start:" in line:
+            try:
+                start = float(line.split("silence_start:")[1].strip().split()[0])
+            except (IndexError, ValueError):
+                start = None
+        elif "silence_end:" in line and start is not None:
+            try:
+                end = float(line.split("silence_end:")[1].strip().split()[0])
+            except (IndexError, ValueError):
+                continue
+            spans.append((start, end))
+            start = None
+    return spans
+
+
+def split_audio_by_silence(audio_path: str, parts: int, out_paths: list) -> bool:
+    """Cut one narration track into `parts` clips at the longest internal pauses."""
+    if parts <= 1:
+        shutil.copy2(audio_path, out_paths[0])
+        return True
+
+    spans = [s for s in _detect_silences(audio_path) if s[1] - s[0] >= 0.25]
+    if len(spans) < parts - 1:
+        return False
+
+    # Longest pauses are the sentence/slide boundaries.
+    ranked = sorted(spans, key=lambda s: (s[1] - s[0]), reverse=True)[: parts - 1]
+    cuts = sorted((s[0] + s[1]) / 2.0 for s in ranked)
+    total = get_audio_duration(audio_path)
+
+    bounds = [0.0] + cuts + [total]
+    try:
+        for i in range(parts):
+            start, end = bounds[i], bounds[i + 1]
+            if end - start < 0.8:
+                return False
+            subprocess.run(
+                ["ffmpeg", "-y", "-ss", f"{start:.3f}", "-to", f"{end:.3f}",
+                 "-i", audio_path, "-c:a", "libmp3lame", "-b:a", "192k", out_paths[i]],
+                check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        return False
+    return all(os.path.exists(p) and os.path.getsize(p) > 2000 for p in out_paths)
+
+
+def generate_voice_batch(texts: list, voice: str, out_paths: list) -> bool:
+    """Narrate every slide in ONE Gemini request, then split it at the pauses.
+
+    The free Gemini tier allows only a handful of TTS requests per day, and one
+    request per video (instead of one per slide) is what keeps the whole day of
+    uploads on the natural voice instead of falling back to edge-tts.
+    """
+    if not texts or len(texts) != len(out_paths):
+        return False
+    if not gemini_voice_enabled() or not (os.environ.get("GEMINI_API_KEY") or "").strip():
+        return False
+
+    combined = "\n\n".join(t.strip() for t in texts if t and t.strip())
+    gemini_voice = gemini_voice_for(voice)
+    tmp_mp3 = os.path.join(BASE_DIR, "temp_render", "_batch_narration.mp3")
+    os.makedirs(os.path.dirname(tmp_mp3), exist_ok=True)
+    try:
+        if not generate_voice_gemini(combined, tmp_mp3, voice_name=gemini_voice):
+            return False
+        if split_audio_by_silence(tmp_mp3, len(out_paths), out_paths):
+            print(f"[voice] one-shot Gemini narration split into {len(out_paths)} clips "
+                  f"(voice={gemini_voice})")
+            return True
+        print("[voice] batch narration could not be split cleanly - using per-slide voices.")
+    except Exception as e:
+        print(f"[voice] batch narration failed ({e}) - using per-slide voices.")
+    return False
+
+
 def get_audio_duration(file_path: str) -> float:
     cmd = [
         "ffprobe", "-v", "error", "-show_entries",
@@ -458,17 +546,22 @@ def build_full_short(topic_data: dict, output_filename: str):
     base_voice_idx = topic_data.get("voice_index", 0)
     lang_voices = voices_for(topic_data)
 
+    # Preferred path: ONE Gemini request narrates the whole video (consistent,
+    # natural voice + saves the small free-tier quota). Falls back to one request
+    # per slide, and finally to edge-tts, without ever stopping the pipeline.
+    audio_paths = [os.path.join(work_dir, f"slide_{i}.mp3") for i in range(1, total + 1)]
+    batch_voice = lang_voices[base_voice_idx % len(lang_voices)]
+    if not generate_voice_batch([s.get("speech", "") for s in slides], batch_voice, audio_paths):
+        for idx, slide in enumerate(slides, start=1):
+            voice = slide.get("voice") or lang_voices[(base_voice_idx + idx - 1) % len(lang_voices)]
+            generate_voice(slide["speech"], voice, audio_paths[idx - 1])
+
     for idx, slide in enumerate(slides, start=1):
         img_path = os.path.join(work_dir, f"slide_{idx}.png")
-        audio_path = os.path.join(work_dir, f"slide_{idx}.mp3")
+        audio_path = audio_paths[idx - 1]
         clip_path = os.path.join(work_dir, f"clip_{idx}.mp4")
 
-        # Alternate male/female per language pool
-        voice = slide.get("voice") or lang_voices[(base_voice_idx + idx - 1) % len(lang_voices)]
-
         create_slide_image(category, slide["title"], slide["text"], idx, total, img_path, lang=topic_lang or None)
-        # Gemini (natural voice) with automatic edge-tts fallback.
-        generate_voice(slide["speech"], voice, audio_path)
         duration = get_audio_duration(audio_path) + 0.4
 
         ffmpeg_clip = [
@@ -503,23 +596,48 @@ def build_full_short(topic_data: dict, output_filename: str):
 
 BG_MUSIC_EN = os.path.join(BASE_DIR, "sad_aesthetic_bg.mp3")
 BG_MUSIC_DIR_EN = os.path.join(BASE_DIR, "music_en")
+BG_MUSIC_DIR_FA = os.path.join(BASE_DIR, "music_fa")
 BG_MUSIC_VOLUME = float(os.environ.get("BG_MUSIC_VOLUME", "0.18"))
+BG_MUSIC_VOLUME_FA = float(os.environ.get("BG_MUSIC_VOLUME_FA", "0.15"))
+
+# Persian pools are defined in topics_pool.py without a music key, so each topic
+# is mapped to the bed that matches its mood (the old single sad track is gone).
+FA_MUSIC_BY_ID = {
+    "psy_attraction_01": "calm",
+    "comedy_daily_01": "energy",
+    "wildlife_predators_01": "cinematic",
+    "ocean_creatures_01": "chill",
+    "love_deep_01": "minimal",
+    "transform_edit_01": "energy",
+    "cooking_secrets_01": "chill",
+    "iran_travel_01": "cinematic",
+    "trending_music_01": "energy",
+    "space_mysteries_01": "cinematic",
+    "sleep_brain_01": "calm",
+    "history_facts_01": "cinematic",
+    "human_body_01": "chill",
+}
+FA_DEFAULT_MOOD = "calm"
 
 
 def bg_track_for(topic_data: dict) -> str:
-    """Per-theme bed for EN topics. FA returns '' (untouched, legacy track)."""
+    """Theme-matched bed for a topic: music_en/* for EN, music_fa/* for FA."""
     lang = (topic_data.get("lang") or "").strip().lower()
-    if not lang.startswith("en"):
-        return ""
-    mood = (topic_data.get("music") or "chill").strip().lower()
-    cand = os.path.join(BG_MUSIC_DIR_EN, f"en_{mood}.mp3")
+    is_en = lang.startswith("en")
+    mood = (topic_data.get("music") or "").strip().lower()
+    if not mood:
+        mood = "chill" if is_en else FA_MUSIC_BY_ID.get(topic_data.get("id", ""), FA_DEFAULT_MOOD)
+    folder = BG_MUSIC_DIR_EN if is_en else BG_MUSIC_DIR_FA
+    prefix = "en" if is_en else "fa"
+
+    cand = os.path.join(folder, f"{prefix}_{mood}.mp3")
     if os.path.exists(cand) and os.path.getsize(cand) > 1000:
         return cand
-    # fallback: any bed in the folder
+    # fallback: any bed of the right language
     try:
-        for f in sorted(os.listdir(BG_MUSIC_DIR_EN)):
-            p = os.path.join(BG_MUSIC_DIR_EN, f)
-            if f.endswith(".mp3") and os.path.getsize(p) > 1000:
+        for f in sorted(os.listdir(folder)):
+            p = os.path.join(folder, f)
+            if f.startswith(prefix) and f.endswith(".mp3") and os.path.getsize(p) > 1000:
                 return p
     except Exception:
         pass
@@ -527,20 +645,20 @@ def bg_track_for(topic_data: dict) -> str:
 
 
 def mix_bg_music(video_path: str, lang: str = "", track: str = "") -> str:
-    """Mix soft background music under an EN video. FA untouched. Returns final path."""
-    if not (lang or "").strip().lower().startswith("en"):
-        return video_path
-    src = track or BG_MUSIC_EN
+    """Mix the theme bed under the narration (both languages). Returns final path."""
+    is_en = (lang or "").strip().lower().startswith("en")
+    src = track or (BG_MUSIC_EN if is_en else "")
     if not src or not os.path.exists(src) or os.path.getsize(src) < 1000:
         print("[music] no bg music file - skipping mix")
         return video_path
+    volume = BG_MUSIC_VOLUME if is_en else BG_MUSIC_VOLUME_FA
     mixed_path = video_path.replace(".mp4", "_music.mp4")
     try:
         cmd = [
             "ffmpeg", "-y", "-i", video_path,
             "-stream_loop", "-1", "-i", src,
             "-filter_complex",
-            f"[0:a]volume=1.0[a0];[1:a]volume={BG_MUSIC_VOLUME}[a1];"
+            f"[0:a]volume=1.0[a0];[1:a]volume={volume}[a1];"
             "[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]",
             "-map", "0:v", "-map", "[aout]",
             "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest",
@@ -548,7 +666,7 @@ def mix_bg_music(video_path: str, lang: str = "", track: str = "") -> str:
         ]
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if os.path.exists(mixed_path) and os.path.getsize(mixed_path) > 10000:
-            print(f"[music] mixed {os.path.basename(src)} ({BG_MUSIC_VOLUME}) -> {mixed_path}")
+            print(f"[music] mixed {os.path.basename(src)} ({volume}) -> {mixed_path}")
             return mixed_path
     except Exception as e:
         print(f"[music] mix failed ({e}) - using dry voice")
