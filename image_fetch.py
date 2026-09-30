@@ -197,7 +197,10 @@ def _photo_looks_fine(path):
         from PIL import Image
         with Image.open(path) as im:
             w, h = im.size
-            if w < 1100 or h < 600:
+            # Free photo sources (Openverse, Wikimedia) cap most results near
+            # 1024px on the long edge. 1100 rejected perfectly good 16:9 photos
+            # and left whole videos with no artwork at all, so the floor is 1024.
+            if w < 1024 or h < 576:
                 return False, f"too small ({w}x{h})"
             ratio = w / h
             if not (1.25 <= ratio <= 2.7):

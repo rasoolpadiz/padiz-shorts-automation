@@ -60,11 +60,12 @@ jobs:
           fi
           python run_long_daily.py $ARGS
 
-      - name: Commit state + generated credits
+      - name: Commit state + generated topics + credits
         run: |
           git config --global user.name "Padiz Automation Bot"
           git config --global user.email "bot@padiz.local"
           git add -f longform_out/posted_long.json
+          git add -f topics_generated
           git add -f longform_images || true
           if git diff --staged --quiet; then
             echo "No state change to commit."

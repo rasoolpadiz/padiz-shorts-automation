@@ -192,18 +192,62 @@ def create_slide_image(category: str, title: str, text: str, slide_num: int, tot
     img.save(output_path, quality=95)
 
 async def generate_voice_edge(text: str, voice: str, output_path: str):
-    """Fallback Persian TTS using edge-tts."""
-    communicator = edge_tts.Communicate(text, voice, rate="+5%", pitch="+0Hz")
+    """Fallback narration using edge-tts.
+
+    A fast rate plus unpunctuated text is what makes a synthetic voice sound
+    robotic, so we slow the delivery down and let sentence punctuation create
+    real breaths instead of a flat wall of words.
+    """
+    fa = not is_fa_text(text)
+    # Persian is vowel-heavy and needs a slower cadence to sound unhurried.
+    rate = "+0%" if fa else "-8%"
+    pitch = "+0Hz" if fa else "-2Hz"
+    body = _add_natural_pauses(text)
+    communicator = edge_tts.Communicate(body, voice, rate=rate, pitch=pitch)
     await communicator.save(output_path)
+
+
+def _add_natural_pauses(text: str) -> str:
+    """Give the TTS engine real breathing room without changing the wording.
+
+    Full stops already produce a pause, so we only add commas to the interior of
+    very long sentences - that is where a real narrator would take a breath.
+    """
+    t = re.sub(r"\s+", " ", (text or "")).strip()
+    if not t:
+        return t
+    comma = "،" if is_fa_text(t) else ","
+    out = []
+    for part in re.split(r"(?<=[.!?؟])\s+", t):
+        words = part.split()
+        if len(words) > 26:
+            # Break on the comma closest to the middle, else mid-phrase.
+            target = len(words) // 2
+            commas = [i for i, w in enumerate(words[:-1]) if w.endswith(comma) or w.endswith(",")]
+            cut = min(commas, key=lambda i: abs(i - target)) if commas else target
+            cut = max(8, min(cut, len(words) - 8))
+            head = " ".join(words[:cut]).rstrip(",، ")
+            out.append(head + comma + " ")
+            out.append(" ".join(words[cut:]).lstrip(",، "))
+        else:
+            out.append(part)
+    joined = re.sub(r"([.!?؟])\s*[,،]\s*", r"\1 ", " ".join(out))
+    return re.sub(r"[,،]\s*[,،]", comma, re.sub(r"\s{2,}", " ", joined))
 
 # Gemini reads whatever text it is given out loud, so the narration must be sent
 # verbatim (wrapping it in "read this aloud: ..." can make the instruction end up
 # in the audio). Delivery is steered with the speech style metadata instead.
 GEMINI_STYLE_FA = (
-    "Native Iranian Persian (Farsi) narration for a short documentary video. "
-    "Speak Farsi with an authentic Tehrani accent, completely natural human intonation, "
-    "warm and expressive, conversational pace with gentle pauses between sentences. "
-    "Pronounce every Persian word correctly and never use an English or Arabic accent"
+    "Native Iranian Persian (Farsi) narration for a long-form documentary video. "
+    "Sound like a thoughtful Iranian man explaining something he genuinely cares "
+    "about to one friend, not like a textbook or an advertisement. "
+    "Authentic Tehrani accent, warm and human intonation, conversational pace. "
+    "Vary the pitch naturally across sentences - let some sentences rise in "
+    "curiosity and others drop in weight. Pause briefly (under half a second) at "
+    "the end of a thought before moving on, and pause a touch longer before a "
+    "surprising fact. Never read in a flat or monotone rhythm, never speed up, "
+    "and never sound like an ad. Pronounce every Persian word correctly, with no "
+    "English or Arabic accent, and keep the numbers and names natural."
 )
 GEMINI_STYLE_EN = (
     "Natural, energetic and expressive American English narration for a viral Shorts video, "
