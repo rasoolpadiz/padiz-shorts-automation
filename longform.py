@@ -406,6 +406,15 @@ def chapters_block(chapters):
     return "\n".join(out)
 
 
+def _clean_credit(text):
+    """Strip HTML tags/links that Wikimedia returns; YouTube rejects HTML in descriptions."""
+    import re
+    text = re.sub(r"<[^>]+>", " ", text)          # drop all tags
+    text = re.sub(r"https?://\S+", "", text)       # drop bare URLs
+    text = re.sub(r"\s+", " ", text).strip(" -,;")
+    return text[:120]
+
+
 def _credits_block(topic_id):
     """Aggregate photo credits (CC0/PD - attribution optional but nice)."""
     folder = os.path.join(BASE_DIR, "longform_images", topic_id)
@@ -420,7 +429,8 @@ def _credits_block(topic_id):
                 first = fh.readline().strip()
         except OSError:
             continue
-        if first and first not in seen:
+        first = _clean_credit(first)
+        if first and first.lower() not in ("unknown", "anonymous", "anonymousunknown author") and first not in seen:
             seen.add(first)
             lines.append(f"- {first}")
     if not lines:
