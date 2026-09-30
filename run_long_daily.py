@@ -45,16 +45,14 @@ def pick_topics(topics, state):
     picked = []
     for lang in order:
         pool = [t for t in topics if t.get("lang") == lang]
-        if not pool:
+        # The owner asked for zero repeats, so anything already published is out -
+        # if the pool runs dry the writer supplies a new topic instead.
+        fresh = [t for t in pool
+                 if t["id"] not in posted and posted.get(t["id"]) != today]
+        if not fresh:
             continue
-        # Never-published topics win outright; otherwise least-used, and never
-        # the one that already went out today.
-        fresh = [t for t in pool if t["id"] not in posted and posted.get(t["id"]) != today]
-        usable = fresh or [t for t in pool if posted.get(t["id"]) != today]
-        if not usable:
-            continue
-        usable.sort(key=lambda t: state.get("counts", {}).get(t["id"], 0))
-        picked.append(usable[0])
+        fresh.sort(key=lambda t: state.get("counts", {}).get(t["id"], 0))
+        picked.append(fresh[0])
         if len(picked) >= PER_DAY:
             break
     return picked

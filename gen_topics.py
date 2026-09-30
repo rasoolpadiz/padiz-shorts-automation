@@ -25,7 +25,11 @@ GEN_DIR = os.path.join(HERE, "topics_generated")
 USED_NICHES = os.path.join(GEN_DIR, "used_niches.json")
 
 SCENES = 22
+# Target words per scene when the writer is generating. Hand-written long-form
+# scenes legitimately run longer (a 22-scene script at ~65 words is what produced
+# the 8-minute videos), so the hard rejection ceiling sits well above the target.
 WORDS_PER_SCENE = {"en": 24, "fa": 20}
+MAX_WORDS_PER_SCENE = {"en": 150, "fa": 130}
 
 HOOK_EN = """\
 OPEN with a cold open that wins the first 15 seconds:
@@ -115,7 +119,7 @@ def validate(topic, lang):
         if not s.get("image_query", "").strip():
             problems.append(f"scene {i} has no image_query")
         words = len(str(s.get("speech", "")).split())
-        if words > WORDS_PER_SCENE[lang] * 2:
+        if words > MAX_WORDS_PER_SCENE[lang]:
             problems.append(f"scene {i} too long ({words} words)")
     if len({s.get("image_query", "") for s in scenes}) < len(scenes) * 0.8:
         problems.append("image queries are too repetitive")
