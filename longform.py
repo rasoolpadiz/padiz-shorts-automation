@@ -446,6 +446,7 @@ def upload_long(meta, topic):
     url = P.upload_to_youtube(meta["video"], topic["title"], desc, topic["tags"],
                               privacy_status=topic.get("privacy", "public"))
     video_id = url.rstrip("/").split("/")[-1]
+    url = f"https://www.youtube.com/watch?v={video_id}"  # long-form -> standard watch URL
     try:
         import pickle
         from googleapiclient.discovery import build
