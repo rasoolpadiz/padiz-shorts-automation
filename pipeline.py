@@ -1,4 +1,4 @@
-﻿import os
+import os
 import sys
 import json
 import asyncio
@@ -182,13 +182,12 @@ def create_slide_image(category: str, title: str, text: str, slide_num: int, tot
         draw_smart(draw, (width // 2, y), line, content_font, THEME["body"])
 
     progress_font = font_for("test", 34)
-    progress_txt = f"Fact {slide_num} of {total_slides}" if en_mode else f"نکته {slide_num} از {total_slides}"
-    draw_smart(draw, (width // 2, card_bottom - 70), progress_txt, progress_font, THEME["progress"])
-
     sub_font = font_for("Subscribe", 42)
     draw.rounded_rectangle([(140, 1620), (width - 140, 1740)], radius=30, fill=THEME["btn"])
-    sub_txt = "Subscribe so you never miss new videos!" if en_mode else "کانال رو سابسکرایب کنید تا ویدیوهای جدید رو از دست ندید"
+    sub_txt = "SUBSCRIBE for daily videos" if en_mode else 'کانال رو SUBSCRIBE کنید'
     draw_smart(draw, (width // 2, 1680), sub_txt, sub_font, THEME["btn_text"])
+    progress_txt = f"Fact {slide_num} of {total_slides}" if en_mode else f"نکته {slide_num} از {total_slides}"
+    draw_smart(draw, (width // 2, card_bottom - 70), progress_txt, progress_font, THEME["progress"])
 
     img.save(output_path, quality=95)
 
@@ -257,6 +256,57 @@ def voices_for(topic_data: dict) -> list:
     if lang.startswith("en"):
         return VOICES_EN
     return VOICES_FA
+
+R_PH = None
+
+def _text_w(draw, s, font):
+    try:
+        l, t, r, b = draw.textbbox((0, 0), s, font=font)
+        return r - l
+    except Exception:
+        return int(len(s or "") * font.size * 0.6)
+
+def draw_cta_pill(draw, W, H, is_en):
+    if is_en:
+        cta = "SUBSCRIBE for daily videos"
+        font = font_for("test", 40)
+        pad_x, pill_h = 46, 84
+        tw = _text_w(draw, cta, font)
+        pill_w = tw + pad_x * 2 + 26
+        x0 = (W - pill_w) // 2
+        y0 = H - 175
+        draw.rounded_rectangle([x0, y0, x0 + pill_w, y0 + pill_h], radius=pill_h // 2, fill=(18, 18, 22, 235), outline=(255, 255, 255, 70), width=2)
+        dcy = y0 + pill_h // 2
+        draw.ellipse([x0 + pad_x - 9, dcy - 9, x0 + pad_x + 9, dcy + 9], fill=(255, 45, 85, 255))
+        draw.text((x0 + pill_w // 2 + 10, y0 + pill_h // 2 - 2), cta, font=font, fill=(255, 255, 255, 255), anchor="mm")
+        return
+    txt = 'کانال رو SUBSCRIBE کنید'
+    font = font_for(txt, 40)
+    tw = _text_w(draw, __import__("pipeline").prepare_bidi_text(txt) if False else txt, font)
+    pad_x, pill_h = 44, 86
+    pill_w = tw + pad_x * 2 + 52
+    if pill_w > W - 120:
+        pill_w = W - 120
+    x0 = (W - pill_w) // 2
+    y0 = H - 178
+    cy = y0 + pill_h // 2
+    draw.rounded_rectangle([x0, y0, x0 + pill_w, y0 + pill_h], radius=pill_h // 2, fill=(16, 16, 22, 235), outline=(255, 255, 255, 70), width=2)
+    draw.ellipse([x0 + pad_x // 2 - 1, cy - 9, x0 + pad_x // 2 + 17, cy + 9], fill=(255, 45, 85, 255))
+    draw_persian(draw, (x0 + pill_w // 2, cy - 2), txt, font, (255, 255, 255, 255), anchor="mm")
+
+def draw_insta_pill(draw, W, H):
+    handle = "@padiz.studio"
+    font = font_for("test", 32)
+    pad_x, pill_h = 34, 62
+    tw = _text_w(draw, handle, font)
+    pill_w = tw + pad_x * 2
+    x0 = (W - pill_w) // 2
+    y0 = H - 84
+    draw.rounded_rectangle([x0, y0, x0 + pill_w, y0 + pill_h],
+                           radius=pill_h // 2, fill=(16, 16, 22, 200))
+    draw.text((x0 + pill_w // 2, y0 + pill_h // 2 - 1), handle,
+              font=font, fill=(200, 200, 210, 255), anchor="mm")
+
 
 # Once every model has failed inside one process there is no point paying the
 # network round-trips again for the next slide, so Gemini is switched off for
