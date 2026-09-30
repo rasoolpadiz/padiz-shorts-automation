@@ -127,6 +127,142 @@ def _long_theme(lang: str) -> dict:
             "muted": (148, 163, 184), "bar": (220, 38, 38)}
 
 
+# --- Colour psychology -------------------------------------------------------
+# Owner directive 2026-09-30: palette must match the mood of the topic, not one
+# default look for every video. Navy/gold = trust & money (finance). Violet/amber
+# = mystery & the unknown. Deep blue/cyan = science & tech. Sepia/brass = history.
+# Crimson = danger/dark history. Emerald = health/nature.
+_MOOD_PALETTES = {
+    "money":     {"accent": (240, 180, 41), "head": (255, 214, 102), "bar": (198, 138, 20),
+                  "wash": (18, 26, 46), "accent2": (16, 185, 129)},
+    "mystery":   {"accent": (168, 85, 247), "head": (233, 196, 106), "bar": (126, 58, 196),
+                  "wash": (24, 14, 40), "accent2": (217, 70, 239)},
+    "science":   {"accent": (56, 189, 248), "head": (165, 243, 252), "bar": (14, 116, 190),
+                  "wash": (8, 22, 40), "accent2": (45, 212, 191)},
+    "history":   {"accent": (214, 158, 84), "head": (245, 213, 158), "bar": (154, 103, 46),
+                  "wash": (32, 22, 14), "accent2": (198, 138, 60)},
+    "dark":      {"accent": (220, 38, 38), "head": (252, 165, 165), "bar": (153, 27, 27),
+                  "wash": (28, 10, 12), "accent2": (249, 115, 22)},
+    "nature":    {"accent": (52, 211, 153), "head": (167, 243, 208), "bar": (5, 150, 105),
+                  "wash": (8, 28, 24), "accent2": (132, 204, 22)},
+}
+
+_MOOD_WORDS = {
+    "money": ["money", "finance", "investing", "wealth", "economy", "business",
+              "crypto", "real estate", "startup", "entrepreneur", "money trap"],
+    "mystery": ["mystery", "unsolved", "conspiracy", "crime", "horror", "secret",
+                "vanished", "enigma", "dark", "occult"],
+    "science": ["science", "space", "ai", "technology", "tech", "coding", "robot",
+                "body", "medical", "physics", "future", "software", "cyber"],
+    "history": ["history", "ancient", "civilization", "archaeology", "empire",
+                "war", "medieval", "iran", "heritage", "archaeological"],
+    "nature": ["nature", "animal", "food", "health", "fitness", "earth", "ocean", "climate"],
+}
+
+
+def _topic_mood(topic):
+    """Pick a palette from the topic id, series and tags."""
+    hay = " ".join([
+        str(topic.get("id", "")), str(topic.get("series", "")),
+        str(topic.get("title", "")), " ".join(topic.get("tags") or []),
+    ]).lower()
+    for mood, words in _MOOD_WORDS.items():
+        if any(w in hay for w in words):
+            return mood
+    return "science"
+
+
+def _palette(topic, lang):
+    """Blend the chosen mood with the language identity so FA/EN stay recognisable."""
+    th = _long_theme(lang)
+    mood = _topic_mood(topic)
+    p = _MOOD_PALETTES[mood]
+    # Keep a hint of the brand identity (teal for EN, red for FA) as accent2.
+    p = dict(p)
+    p["brand"] = th["accent"]
+    p["brand_bg"] = th["bg"]
+    p["mood"] = mood
+    return p
+
+
+def _vignette(img, strength=140, w=None, h=None):
+    """Darken the corners so text always wins over a busy photo."""
+    from PIL import Image, ImageDraw, ImageFilter
+    w, h = w or img.width, h or img.height
+    mask = Image.new("L", (w, h), 0)
+    d = ImageDraw.Draw(mask)
+    d.ellipse([-w * 0.30, -h * 0.34, w * 1.30, h * 1.34], fill=255)
+    mask = mask.filter(ImageFilter.GaussianBlur(int(260 * w / WIDTH)))
+    dark = Image.new("RGB", (w, h), (0, 0, 0))
+    img.paste(dark, (0, 0), mask.point(lambda v: int((255 - v) * strength / 255)))
+    return img
+
+
+def _top_scrim(img, band=250, peak=210):
+    """Extra darkening under the top chrome so the brand line is never lost."""
+    from PIL import Image
+    w, h = img.width, img.height
+    band = int(band * w / WIDTH)
+    m = Image.new("L", (1, band))
+    px = m.load()
+    for y in range(band):
+        t = y / max(band - 1, 1)
+        px[0, y] = int(peak * (1 - t) ** 1.3)
+    m = m.resize((w, band))
+    full = Image.new("L", (w, h), 0)
+    full.paste(m, (0, 0))
+    black = Image.new("RGB", (w, h), (2, 4, 10))
+    return Image.composite(black, img, full)
+
+
+def _gradient_scrim(img, top=70, bottom=232, left_boost=True):
+    """Cinematic vertical scrim: keeps the photo alive up top, black where text sits."""
+    from PIL import Image, ImageDraw, ImageChops
+    w, h = img.width, img.height
+    grad = Image.new("L", (1, h))
+    px = grad.load()
+    for y in range(h):
+        t = y / max(h - 1, 1)
+        px[0, y] = int(top + (bottom - top) * (t ** 1.55))
+    grad = grad.resize((w, h))
+    if left_boost:
+        side = Image.new("L", (w, h), 0)
+        sd = ImageDraw.Draw(side)
+        for x in range(w):
+            v = int(120 * max(0.0, 1.0 - (x / (w * 0.62)) ** 1.4))
+            sd.line([(x, 0), (x, h)], fill=v)
+        grad = ImageChops.add(grad, side, scale=1.0)
+    black = Image.new("RGB", (w, h), (4, 6, 14))
+    return Image.composite(black, img, grad.point(lambda v: min(255, v)))
+
+
+def _wrap_to_width(draw, text, font, max_width, max_lines=4):
+    """Real measured wrapping (character counting produced ragged, broken lines)."""
+    words = text.split()
+    lines, cur = [], []
+    for w in words:
+        trial = " ".join(cur + [w])
+        if draw.textlength(trial, font=font) <= max_width or not cur:
+            cur.append(w)
+        else:
+            lines.append(" ".join(cur))
+            cur = [w]
+            if len(lines) == max_lines:
+                break
+    if cur and len(lines) < max_lines:
+        lines.append(" ".join(cur))
+    if len(lines) == max_lines and len(words) > sum(len(l.split()) for l in lines):
+        lines[-1] = lines[-1] + " ..."
+    return lines
+
+
+def _shadow_text(draw, xy, text, font, fill, anchor=None, shadow=(0, 0, 0, 190), off=4):
+    """Text with a soft drop shadow - mandatory over photography."""
+    x, y = xy
+    draw.text((x + off, y + off), text, font=font, fill=shadow, anchor=anchor)
+    draw.text(xy, text, font=font, fill=fill, anchor=anchor)
+
+
 def _cover_crop(im, w, h):
     """Resize + center-crop an image to exactly w x h (like CSS background-size: cover)."""
     from PIL import Image
@@ -144,76 +280,110 @@ def _cover_crop(im, w, h):
     return im.crop((left, top, left + w, top + h))
 
 
-def create_scene_frame(scene, idx, total, series_title, out_path, lang="fa", bg_image=None):
-    """Scene card: real photo (optional) + dark scrim + text panel + progress UI."""
-    from PIL import Image, ImageDraw
+def create_scene_frame(scene, idx, total, series_title, out_path, lang="fa", bg_image=None, topic=None):
+    """Scene card: full-bleed photo + cinematic scrim + kinetic-ready typographic block.
 
-    th = _long_theme(lang)
+    Rewritten 2026-09-30 after owner feedback that the old flat-blend frame with one
+    grey rounded box looked weak. Now: real measured text wrapping, drop shadows,
+    a mood palette chosen from the topic, a ghost numeral, and a cleaner progress rail.
+    """
+    from PIL import Image, ImageDraw, ImageFilter
+    import fonts as F
+
+    topic = topic or {}
+    pal = _palette(topic, lang)
+    theme_bg = tuple(pal["brand_bg"])
+    accent, head, bar = pal["accent"], pal["head"], pal["bar"]
+
+    # --- Background: photo, graded, not just dimmed ------------------------------
+    base = None
     if bg_image and os.path.exists(bg_image):
         try:
             base = _cover_crop(Image.open(bg_image).convert("RGB"), WIDTH, HEIGHT)
-            scrim = Image.new("RGB", (WIDTH, HEIGHT), th["bg"])
-            img = Image.blend(base, scrim, 0.66)      # keep the photo visible but dark
         except Exception as e:
             print(f"  [frame] image failed ({e}) - using flat background")
-            img = Image.new("RGB", (WIDTH, HEIGHT), color=th["bg"])
-    else:
-        img = Image.new("RGB", (WIDTH, HEIGHT), color=th["bg"])
+    if base is None:
+        base = Image.new("RGB", (WIDTH, HEIGHT), tuple(pal["wash"]))
+
+    # Gentle colour grade toward the topic mood so every frame feels intentional.
+    wash = Image.new("RGB", (WIDTH, HEIGHT), tuple(pal["wash"]))
+    base = Image.blend(base, wash, 0.18)
+    img = _gradient_scrim(base, top=58, bottom=236)
+    img = _vignette(img, strength=150)
+    img = _top_scrim(img, band=250, peak=205)
 
     draw = ImageDraw.Draw(img, "RGBA")
 
-    draw.rectangle([(0, 0), (14, HEIGHT)], fill=th["accent"])
-    draw.rectangle([(0, 0), (WIDTH, 12)], fill=th["bar"])
+    # --- Top chrome: brand, series, part chip -------------------------------------
+    brand_font = F.body(28, "Padiz")
+    series_font = F.body(30, series_title)
 
-    # text panel (left). Bottom is kept clear for the burned-in subtitles.
-    draw.rounded_rectangle([(80, 130), (1190, HEIGHT - 260)], radius=32,
-                           fill=th["bg2"] + (232,), outline=th["accent"] + (255,), width=3)
+    label = (f"PART {idx} / {total}" if (lang or "").lower().startswith("en")
+             else f"بخش {idx} از {total}")
+    # NOTE: the font must be chosen from the *real* string - passing a Latin sample
+    # made the Persian label fall back to a Latin face and render as empty boxes.
+    chip_font = F.body(26, label)
 
-    brand_font = P.font_for("Padiz", 30)
-    P.draw_smart(draw, (130, 180), "PADIZ STUDIO", brand_font, th["muted"], anchor="lm")
-    head_font = P.font_for(series_title, 38)
-    P.draw_smart(draw, (130, 226), series_title, head_font, th["muted"], anchor="lm")
+    _shadow_text(draw, (96, 74), "PADIZ STUDIO", brand_font, (255, 255, 255, 220), off=3)
+    _shadow_text(draw, (96, 116), series_title, series_font, accent + (245,), off=3)
 
-    draw.rounded_rectangle([(130, 292), (350, 366)], radius=20, fill=th["bar"])
-    num_font = P.font_for("1", 38)
-    label = f"Part {idx}/{total}" if (lang or "").lower().startswith("en") else f"بخش {idx} از {total}"
-    P.draw_smart(draw, (240, 329), label, num_font, (255, 255, 255))
+    tw = draw.textlength(label, font=chip_font)
+    pad_x, chip_h = 30, 56
+    chip_w = tw + pad_x * 2
+    cx0 = WIDTH - 96 - chip_w
+    draw.rounded_rectangle([(cx0, 70), (cx0 + chip_w, 70 + chip_h)], radius=chip_h // 2,
+                           fill=accent + (240,))
+    draw.text((cx0 + chip_w / 2, 70 + chip_h / 2), label, font=chip_font,
+              fill=(12, 14, 22, 255), anchor="mm")
 
-    title_font = P.font_for(scene["title"], 64)
-    P.draw_smart(draw, (130, 462), scene["title"], title_font, th["head"], anchor="lm")
+    # --- Ghost numeral on the right ------------------------------------------------
+    ghost = F.number(340, str(idx))
+    _shadow_text(draw, (WIDTH - 150, 430), str(idx), ghost, accent + (38,), anchor="mm", off=0)
 
-    body_font = P.font_for(scene["text"], 44)
-    max_chars = 44 if not P.is_fa_text(scene["text"]) else 33
-    words = scene["text"].split()
-    lines, cur = [], []
-    for w in words:
-        if len(" ".join(cur + [w])) > max_chars:
-            lines.append(" ".join(cur)); cur = [w]
-        else:
-            cur.append(w)
-    if cur:
-        lines.append(" ".join(cur))
+    # --- Text block (kept clear of the subtitle zone at the bottom) ----------------
+    x = 96
+    max_w = int(WIDTH * 0.56)
+    title_font = F.display(78, scene["title"])
+    body_font = F.body(44, scene["text"])
 
-    y = 560
-    for line in lines[:5]:
-        P.draw_smart(draw, (130, y), line, body_font, th["body"], anchor="lm")
-        y += 64
+    # Auto-shrink long titles so they never collide with the edge.
+    while draw.textlength(scene["title"], font=title_font) > max_w and title_font.size > 52:
+        title_font = F.display(title_font.size - 4, scene["title"])
 
-    big_font = P.font_for("1", 280)
-    P.draw_smart(draw, (1580, 400), f"{idx}", big_font, th["bg2"], anchor="mm")
+    title_lines = _wrap_to_width(draw, scene["title"], title_font, max_w, max_lines=2)
+    body_lines = _wrap_to_width(draw, scene["text"], body_font, max_w, max_lines=3)
 
-    dot_y = HEIGHT - 90
-    gap = 34
-    start_x = WIDTH - 120 - (total - 1) * gap
+    y = 300
+    # Accent rule above the title - a designed detail instead of a floating box.
+    draw.rectangle([(x, y - 26), (x + 132, y - 18)], fill=accent + (255,))
+
+    for line in title_lines:
+        _shadow_text(draw, (x, y), line, title_font, head, off=5)
+        y += int(title_font.size * 1.18)
+
+    y += 22
+    for line in body_lines:
+        _shadow_text(draw, (x, y), line, body_font, (238, 243, 250, 240), shadow=(0, 0, 0, 215), off=3)
+        y += int(body_font.size * 1.42)
+
+    # --- Progress rail -------------------------------------------------------------
+    rail_y = HEIGHT - 58
+    draw.rounded_rectangle([(96, rail_y), (WIDTH - 96, rail_y + 8)], radius=4,
+                           fill=(255, 255, 255, 38))
+    filled = 96 + int((WIDTH - 192) * (idx / max(total, 1)))
+    draw.rounded_rectangle([(96, rail_y), (filled, rail_y + 8)], radius=4, fill=accent + (255,))
+
+    dot_y = rail_y + 34
+    gap = 30
+    start_x = WIDTH - 96 - (total - 1) * gap
     for i in range(1, total + 1):
-        x = start_x + (i - 1) * gap
-        r = 12
-        draw.ellipse([(x - r, dot_y - r), (x + r, dot_y + r)],
-                     fill=th["accent"] if i <= idx else th["bg2"],
-                     outline=th["muted"], width=2)
-
-    draw.rectangle([(0, HEIGHT - 40), (WIDTH, HEIGHT - 26)], fill=th["bg2"])
-    draw.rectangle([(0, HEIGHT - 40), (int(WIDTH * idx / total), HEIGHT - 26)], fill=th["accent"])
+        x_i = start_x + (i - 1) * gap
+        r = 7
+        if i <= idx:
+            draw.ellipse([(x_i - r, dot_y - r), (x_i + r, dot_y + r)], fill=accent + (255,))
+        else:
+            draw.ellipse([(x_i - r, dot_y - r), (x_i + r, dot_y + r)],
+                         fill=(255, 255, 255, 30), outline=(255, 255, 255, 60), width=1)
 
     img.save(out_path, quality=95)
     return out_path
@@ -221,38 +391,75 @@ def create_scene_frame(scene, idx, total, series_title, out_path, lang="fa", bg_
 
 
 
-def create_thumbnail(topic, out_path):
-    """1280x720 clickable thumbnail: big hook text + brand."""
+def create_thumbnail(topic, out_path, bg_image=None):
+    """1280x720 thumbnail built on a real photo.
+
+    Owner verdict 2026-09-30: the old flat-colour card looked cheap. This version uses
+    the strongest scene photo, a hard contrast scrim, 2-4 words of display type and a
+    single accent element - readable at 210px wide in mobile search.
+    """
     from PIL import Image, ImageDraw
+    import fonts as F
 
     lang = topic.get("lang", "fa")
-    th = _long_theme(lang)
-    img = Image.new("RGB", (1280, 720), color=th["bg"])
-    draw = ImageDraw.Draw(img)
-    draw.rectangle([(0, 0), (1280, 22)], fill=th["bar"])
-    draw.rounded_rectangle([(60, 120), (1220, 600)], radius=30, fill=th["bg2"],
-                           outline=th["accent"], width=4)
+    pal = _palette(topic, lang)
+    accent, head = pal["accent"], pal["head"]
+    W, H = 1280, 720
 
+    # --- Photo base ---------------------------------------------------------------
+    if bg_image and os.path.exists(bg_image):
+        try:
+            img = _cover_crop(Image.open(bg_image).convert("RGB"), W, H)
+        except Exception:
+            img = Image.new("RGB", (W, H), tuple(pal["wash"]))
+    else:
+        img = Image.new("RGB", (W, H), tuple(pal["wash"]))
+    img = _top_scrim(img, band=200, peak=190)
+    img = _gradient_scrim(img, top=40, bottom=225, left_boost=False)
+    img = _vignette(img, strength=170)
+    draw = ImageDraw.Draw(img, "RGBA")
+
+    # --- Hook text (2-4 words, auto-shrunk to fit) --------------------------------
     hook = topic.get("thumbnail_text") or topic["title"].replace("#shorts", "").strip()
-    hook_font = P.font_for(hook, 96)
+    hook = hook.strip()
     words = hook.split()
-    lines, cur = [], []
-    limit = 18 if not P.is_fa_text(hook) else 16
-    for w in words:
-        if len(" ".join(cur + [w])) > limit:
-            lines.append(" ".join(cur)); cur = [w]
-        else:
-            cur.append(w)
-    if cur:
-        lines.append(" ".join(cur))
+    if len(words) > 4:
+        hook = " ".join(words[:4])
 
-    y = 250 if len(lines) < 3 else 190
-    for line in lines[:3]:
-        P.draw_smart(draw, (640, y), line, hook_font, th["head"])
-        y += 120
+    size = 132
+    lines = None
+    while size > 44:
+        f = F.display(size, hook)
+        trial = _wrap_to_width(draw, hook, f, W - 190, max_lines=3)
+        widest = max((draw.textlength(l, font=f) for l in trial), default=0)
+        if len(trial) <= 3 and widest <= W - 190 and len(trial) * size * 1.12 <= 470:
+            lines, size_used = trial, size
+            break
+        size -= 6
+    if lines is None:
+        lines = _wrap_to_width(draw, hook, F.display(60, hook), W - 190, max_lines=3)
+        size_used = 60
 
-    brand_font = P.font_for("Padiz", 40)
-    P.draw_smart(draw, (640, 660), "PADIZ STUDIO", brand_font, th["muted"])
+    font = F.display(size_used, hook)
+    line_h = int(size_used * 1.14)
+    block_h = line_h * len(lines)
+    y = (H - block_h) / 2 + 18
+
+    for line in lines:
+        _shadow_text(draw, (W / 2, y), line, font, head, anchor="ma", off=7)
+        y += line_h
+
+    # --- Accent bar under the hook -------------------------------------------------
+    bar_y = min(int(y + 16), H - 150)
+    bar_w = min(int(max(draw.textlength(l, font=font) for l in lines)) + 60, W - 120)
+    draw.rounded_rectangle([(W / 2 - bar_w / 2, bar_y), (W / 2 + bar_w / 2, bar_y + 12)],
+                           radius=6, fill=accent + (255,))
+
+    # --- Brand lockup ---------------------------------------------------------------
+    brand_font = F.display(40, "Padiz")
+    _shadow_text(draw, (W / 2, H - 96), "PADIZ STUDIO", brand_font, (255, 255, 255, 235),
+                 anchor="ma", off=4)
+
     img.save(out_path, quality=95)
     return out_path
 
@@ -314,7 +521,7 @@ def build_long_video(topic, output_name=None, use_images=True):
         img = os.path.join(work, f"scene_{idx:02d}.png")
         clip = os.path.join(work, f"clip_{idx:02d}.mp4")
         create_scene_frame(scene, idx, total, series, img, lang=lang,
-                           bg_image=images.get(idx))
+                           bg_image=images.get(idx), topic=topic)
 
         audio = voices[idx - 1]
         speech_dur = P.get_audio_duration(audio)
@@ -383,7 +590,10 @@ def build_long_video(topic, output_name=None, use_images=True):
                        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     thumb = os.path.join(LONGFORM_DIR, f"thumb_{topic['id']}.jpg")
-    create_thumbnail(topic, thumb)
+    # Prefer a scene photo that passed the quality gate, so the thumbnail is never
+    # built on a rejected diagram/scan.
+    thumb_bg = next((images[i] for i in sorted(images)), None)
+    create_thumbnail(topic, thumb, bg_image=thumb_bg)
 
     duration = P.get_audio_duration(final)
     meta = {"id": topic["id"], "video": final, "thumbnail": thumb,

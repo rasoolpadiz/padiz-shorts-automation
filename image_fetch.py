@@ -24,7 +24,53 @@ UA_IMG = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 OPENVERSE = "https://api.openverse.org/v1/images/"
 COMMONS = "https://commons.wikimedia.org/w/api.php"
 
+# Global, persistent registry of every photo already used on the channel.
+# Owner directive 2026-09-30: "هیچ چیز تکراری نباشه" - a photo must never appear
+# twice, not even in the EN and FA version of the same topic. The old code reset
+# `used = set()` on every run, which is why both money videos shared ~all imagery.
+USED_IMAGES_PATH = os.path.join(IMG_ROOT, "_used_images.json")
+
 _last_api_call = [0.0]          # throttle for Wikimedia (avoids HTTP 429)
+
+# Wikimedia/Openverse are full of diagrams, charts, scans and maps. They look like
+# lecture slides inside a video, so anything matching these words is rejected.
+# Single words are matched on word boundaries (otherwise "graph" kills "photograph").
+_BAD_WORDS = (
+    "diagram", "chart", "charts", "map", "maps", "logo", "icon", "icons", "seal",
+    "poster", "screenshot", "scan", "scans", "table", "infographic", "scheme",
+    "topographic", "timeline", "cover", "stamp", "panel", "panels", "comics",
+    "plaque", "inscription", "cuneiform", "hieroglyph", "manuscript", "form",
+    "page", "pages", "list", "file", "symbol", "glyph", "illustration",
+)
+_BAD_PHRASES = (
+    "coat of arms", "title page", "list of", "sketch map", "newspaper", "periodical",
+    "journal", "magazine", "book cover", "label of", "flag of", "map of",
+)
+
+
+def _title_is_usable(title):
+    """Reject diagrams/charts/scans - we want cinematic photography, not documents."""
+    import re
+    low = str(title or "").lower()
+    if any(p in low for p in _BAD_PHRASES):
+        return False
+    tokens = set(re.split(r"[^a-z0-9]+", low))
+    return not (tokens & set(_BAD_WORDS))
+
+
+def load_used_registry():
+    """Read the channel-wide used-image hashes."""
+    try:
+        with open(USED_IMAGES_PATH, "r", encoding="utf-8") as f:
+            return set(json.load(f))
+    except (OSError, ValueError):
+        return set()
+
+
+def save_used_registry(hashes):
+    os.makedirs(IMG_ROOT, exist_ok=True)
+    with open(USED_IMAGES_PATH, "w", encoding="utf-8") as f:
+        json.dump(sorted(hashes), f, indent=1)
 
 
 def _log(msg):
@@ -92,6 +138,8 @@ def _openverse(query, limit=8):
         return []
     out = []
     for item in data.get("results", []):
+        if not _title_is_usable(item.get("title")):
+            continue
         # Direct source URLs often 403; Openverse's own thumb proxy is reliable.
         thumb = item.get("thumbnail")
         url = f"{thumb}?full_size=true" if thumb else item.get("url")
@@ -120,6 +168,8 @@ def _commons(query, limit=10):
         return []
     out = []
     for page in (data.get("query", {}).get("pages") or {}).values():
+        if not _title_is_usable(page.get("title")):
+            continue
         info = (page.get("imageinfo") or [{}])[0]
         url = info.get("thumburl") or info.get("url")
         meta = info.get("extmetadata") or {}
@@ -135,6 +185,33 @@ def _commons(query, limit=10):
         artist = _clean_html((meta.get("Artist", {}) or {}).get("value"))
         out.append((url, f"Wikimedia/{lic or 'pd'}/{artist}"))
     return out
+
+
+def _photo_looks_fine(path):
+    """Reject low-res, wrongly-shaped or document/scan-looking images.
+
+    Commons happily returns 300px thumbnails and black-and-white scans. Those read
+    as broken slides on screen, so they are rejected before they enter the video.
+    """
+    try:
+        from PIL import Image
+        with Image.open(path) as im:
+            w, h = im.size
+            if w < 1100 or h < 600:
+                return False, f"too small ({w}x{h})"
+            ratio = w / h
+            if not (1.25 <= ratio <= 2.7):
+                return False, f"bad aspect ({ratio:.2f})"
+            small = im.convert("RGB").resize((160, 90))
+            pixels = list(small.getdata())
+            # Near-uniform colour = synthetic graphic, not a photograph.
+            avg = sum(sum(p) for p in pixels) / (len(pixels) * 3)
+            spread = sum(abs(sum(p) / 3 - avg) for p in pixels) / len(pixels)
+            if spread < 13:
+                return False, f"flat graphic (spread {spread:.1f})"
+            return True, "ok"
+    except Exception as e:
+        return False, f"unreadable ({e})"
 
 
 def fetch_scene_image(topic_id, scene_idx, query, force=False, used_hashes=None):
@@ -155,12 +232,15 @@ def fetch_scene_image(topic_id, scene_idx, query, force=False, used_hashes=None)
             return None
 
     if os.path.exists(out_path) and not force:
-        # Cached hit - but reject it if an earlier scene already uses this exact photo.
+        # Cached hit - but reject it if an earlier scene or another video uses it.
         cached = _digest(out_path)
         if cached and cached not in used_hashes:
-            used_hashes.add(cached)
-            return out_path
-        if cached:
+            ok, why = _photo_looks_fine(out_path)
+            if ok:
+                used_hashes.add(cached)
+                return out_path
+            _log(f"  [img] cached scene {scene_idx} rejected: {why} -> refetching")
+        elif cached:
             os.remove(out_path)          # duplicate cache -> re-download
 
     # Scene-specific words first; broader variants only as fallbacks.
@@ -182,6 +262,11 @@ def fetch_scene_image(topic_id, scene_idx, query, force=False, used_hashes=None)
                 try:
                     if not _download(url, out_path):
                         continue
+                    ok, why = _photo_looks_fine(out_path)
+                    if not ok:
+                        _log(f"  [img] scene {scene_idx}: rejected - {why}")
+                        os.remove(out_path)
+                        continue
                     digest = _digest(out_path)
                     if not digest:
                         continue
@@ -199,14 +284,22 @@ def fetch_scene_image(topic_id, scene_idx, query, force=False, used_hashes=None)
     return None
 
 
-def fetch_topic_images(topic):
-    """Fetch a photo for every scene (cached). Returns {scene_idx: path}."""
-    import hashlib
+def fetch_topic_images(topic, extra_used=None):
+    """Fetch a photo for every scene (cached). Returns {scene_idx: path}.
+
+    `extra_used` lets a caller reserve hashes before this topic runs. The channel-wide
+    registry is loaded and saved so no photo is ever reused on a later video.
+    """
     mapping = {}
-    used = set()
+    used = load_used_registry()
+    if extra_used:
+        used |= set(extra_used)
     for idx, scene in enumerate(topic.get("scenes", []), start=1):
         query = scene.get("image_query") or f"{scene.get('title', '')} {topic.get('series', '')}".strip()
         path = fetch_scene_image(topic["id"], idx, query, used_hashes=used)
         if path:
             mapping[idx] = path
+    save_used_registry(used)
+    _log(f"  [img] {len(mapping)}/{len(topic.get('scenes', []))} photos ready, "
+         f"{len(used)} images used channel-wide")
     return mapping
