@@ -1,11 +1,13 @@
 {
   "posted": {
     "en_long_money_01": "2026-09-30",
-    "fa_long_money_01": "2026-09-30"
+    "fa_long_money_01": "2026-09-30",
+    "fa_long_ai_mistakes_01": "2026-10-01"
   },
   "counts": {
     "en_long_money_01": 1,
-    "fa_long_money_01": 1
+    "fa_long_money_01": 1,
+    "fa_long_ai_mistakes_01": 1
   },
   "note": "Seeded with the two videos already on the channel (watch?v=DTJFqLEKXzo, I_8weqCLO28) so the daily selector never reuses them. CI appends to this file after every upload."
 }
