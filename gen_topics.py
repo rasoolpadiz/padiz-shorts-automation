@@ -69,10 +69,45 @@ def _slug(text, ascii_only=True):
 
 
 def niche_queue(lang):
-    """Niches the channel has not covered yet, in the owner's approved order."""
+    """Niches still unused, ordered so proven winners are made more often.
+
+    Owner directive 2026-10-01: "ویدیوهایی که بازدید می‌خورند را بیشتر کن".
+    A niche is promoted when its real YouTube score is above the channel median;
+    a niche that has been used recently is only demoted, never hard-blocked, so
+    a proven winner can come back after the cooldown.
+
+    If analytics_history.json is missing (first run, or the collector failed) the
+    owner's approved order is returned untouched - the old behaviour.
+    """
     used = _json_load(USED_NICHES, {})
     pool = N.EN_NICHES if lang == "en" else N.FA_NICHES
-    return [x for x in pool if x not in set(used.get(lang, []))]
+    used_set = set(used.get(lang, []))
+
+    try:
+        import analytics as A
+        scores = A.load_scores()
+    except Exception:
+        scores = {}
+    if not scores:
+        return [x for x in pool if x not in used_set]
+
+    # Never re-pick something published in the last couple of weeks.
+    try:
+        import analytics as A
+        cooling = A.recent_niches(lang, days=7)
+    except Exception:
+        cooling = set()
+
+    def rank(niche):
+        score = A.family_score(lang, niche, scores) if scores else 1.0
+        if niche in cooling:
+            score -= 0.5          # deprioritise, not block
+        return -score
+
+    candidates = [x for x in pool if x not in used_set or x in cooling]
+    if not candidates:
+        candidates = list(pool)
+    return sorted(candidates, key=rank)
 
 
 def mark_niche_used(lang, niche):

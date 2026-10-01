@@ -29,6 +29,11 @@ TOKEN_PATH = os.path.join(BASE_DIR, "token.pickle")
 MIN_GAP_MINUTES = 90
 
 
+def _today():
+    """Today's UTC date, used to keep recently-posted topics out of recycling."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
 def minutes_since_last_post(posted_records):
     """Minutes since the most recent upload, or None when unknown."""
     stamps = [r.get("posted_at") for r in posted_records if r.get("posted_at")]
@@ -115,19 +120,44 @@ def main():
     # EN replaces the old viral-downloader: same self-made style, English audience.
     # Odd total_posted -> EN turn; even -> FA turn (FA pool untouched).
     def pick_from(pool, posted_records):
+        """Fresh topic first; among fresh ones, the proven performer wins.
+
+        Owner directive 2026-10-01: make more of what actually gets views.
+        Ranking uses real YouTube numbers from analytics.py. When there is no
+        data the original pool order is kept, so behaviour is unchanged.
+        """
+        lang = "en" if pool is FACTS_POOL_EN else "fa"
         posted_ids = {r["id"] for r in posted_records}
-        for item in pool:
-            if item["id"] not in posted_ids:
-                return dict(item, lang="en" if pool is FACTS_POOL_EN else "fa")
+
+        def performance(item):
+            """Real median views/day of this topic's category; 0 when unknown."""
+            try:
+                import analytics as A
+                scores = A.load_scores()
+            except Exception:
+                return 0.0
+            if not scores:
+                return 0.0
+            return scores.get((lang, item.get("category") or ""), 0.0)
+
+        fresh = [it for it in pool if it["id"] not in posted_ids]
+        if fresh:
+            # A stable sort keeps the original pool order for equal scores.
+            return dict(sorted(fresh, key=lambda it: -performance(it))[0], lang=lang)
+
         last_posted = {}
         for record in posted_records:
             tid = record.get("id")
             st = record.get("posted_at") or ""
             if tid not in last_posted or st > last_posted[tid]:
                 last_posted[tid] = st
-        print("Pool exhausted - recycling oldest topic...")
-        best = min(pool, key=lambda it: last_posted.get(it["id"], ""))
-        return dict(best, lang="en" if pool is FACTS_POOL_EN else "fa")
+        print("Pool exhausted - recycling a proven performer (oldest first)...")
+        # Among topics not posted in a while, prefer the ones that performed.
+        eligible = [it for it in pool if last_posted.get(it["id"], "")[:10] < _today()]
+        candidates = eligible or list(pool)
+        best = min(candidates,
+                   key=lambda it: (-performance(it), last_posted.get(it["id"], "")))
+        return dict(best, lang=lang)
 
     total_posted = len(posted_records)
     force_lang = (os.environ.get("FORCE_LANG") or "").strip().lower()
