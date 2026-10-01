@@ -83,17 +83,25 @@ jobs:
           python run_daily.py
 
       - name: Commit and push updated state
+        if: always()
         run: |
           git config --global user.name "Padiz Automation Bot"
           git config --global user.email "bot@padiz.local"
+          # State files first - posted_shorts.json is the source of truth.
           git add -f posted_shorts.json
-          git add -f shorts_generated || true
           if [ -f processed_reels.json ]; then git add -f processed_reels.json; fi
+          git add -f shorts_generated || true
           if git diff --staged --quiet; then
             echo "No state change to commit."
-          else
-            git commit -m "chore: update posted shorts state [skip ci]"
-            # actions/checkout leaves a detached HEAD, so the target branch must
-            # be named explicitly - a bare "git push" fails there.
-            git push origin HEAD:main
+            exit 0
           fi
+          git commit -m "chore: update posted shorts state [skip ci]"
+          # actions/checkout leaves a detached HEAD, so the target branch must
+          # be named explicitly. pull --rebase first: local docs commits can
+          # otherwise make origin/main move ahead and reject the push.
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && break
+            echo "push attempt $i failed - retrying after rebase..."
+            sleep 5
+          done
+          git status --short
