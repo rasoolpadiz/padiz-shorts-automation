@@ -31,8 +31,13 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 POOL_PATH = os.path.join(BASE_DIR, "discovery_pool.json")
 QUOTA_PATH = os.path.join(BASE_DIR, "discovery_quota.json")
 UA = {"User-Agent": "Mozilla/5.0 (compatible; PadizStudioBot/1.0)"}
-MAX_YT_SEARCHES_PER_DAY = int(os.environ.get("DISCOVERY_YT_SEARCHES", "10"))
+MAX_YT_SEARCHES_PER_DAY = int(os.environ.get("DISCOVERY_YT_SEARCHES", "6"))
 VIDEOS_PER_SEARCH = 8
+# An upload costs 1600 quota units and a heavy day is ~6 uploads, so the space
+# left for search is small. This cap is deliberately conservative: discovery is
+# a nice-to-have, publishing is not. The counter is shared with CI through
+# discovery_quota.json, so a local experiment also consumes the daily budget.
+QUOTA_UNITS_PER_SEARCH = 100
 
 
 def _log(msg):
