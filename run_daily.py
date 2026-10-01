@@ -225,6 +225,16 @@ def main():
 
     save_posted(candidate["id"], short_url)
 
+    # A generated Short must never be reused either - mark it at the source so
+    # gen_shorts.top_up treats it as spent on the next run.
+    try:
+        import gen_shorts as GS
+        if candidate.get("id", "").startswith(("en_auto_", "fa_auto_")):
+            GS.mark_posted(candidate["id"])
+            print("[shorts] marked generated topic as posted")
+    except Exception as e:
+        print(f"[shorts] could not mark generated topic ({e})")
+
     # Clean up local video file
     if os.path.exists(rendered_path):
         try:

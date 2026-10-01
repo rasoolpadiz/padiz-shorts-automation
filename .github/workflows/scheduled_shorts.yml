@@ -54,6 +54,25 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      # Keep a small buffer of freshly-discovered Shorts so run_daily always has
+      # something new. Owner directive: Shorts should also come from the internet,
+      # not only from the fixed pool. Capped at 2 per run and never fatal - if
+      # discovery or the writer fails, run_daily falls back to the static pool.
+      - name: Top up dynamic Shorts from discovered topics
+        env:
+          YOUTUBE_TOKEN_B64: ${{ secrets.YOUTUBE_TOKEN_B64 }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python - <<'PY' || echo "::warning::shorts top-up failed - using the static pool"
+          import gen_shorts as GS
+          for lang in ("fa", "en"):
+              try:
+                  made = GS.top_up(lang, 2)
+                  print(f"[shorts] {lang}: {len(made)} new")
+              except Exception as e:
+                  print(f"[shorts] {lang} top-up failed: {e}")
+          PY
+
       - name: Run automated Shorts pipeline (FA/EN self-made, no downloader)
         env:
           YOUTUBE_TOKEN_B64: ${{ secrets.YOUTUBE_TOKEN_B64 }}
@@ -68,6 +87,7 @@ jobs:
           git config --global user.name "Padiz Automation Bot"
           git config --global user.email "bot@padiz.local"
           git add -f posted_shorts.json
+          git add -f shorts_generated || true
           if [ -f processed_reels.json ]; then git add -f processed_reels.json; fi
           if git diff --staged --quiet; then
             echo "No state change to commit."
