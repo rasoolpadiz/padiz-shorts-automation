@@ -66,18 +66,53 @@ def _median(values):
 
 
 def _credentials():
-    """Stored OAuth credentials: base64 pickle from secrets, else the repo file."""
-    raw = os.environ.get("YOUTUBE_TOKEN_B64")
-    if not raw and os.path.exists(TOKEN_PATH):
+    """Stored OAuth credentials.
+
+    The token reaches us in three shapes, and CI mixes them:
+      1. env YOUTUBE_TOKEN_B64 (base64 of a pickled Credentials)
+      2. YOUTUBE_TOKEN_B64.txt in the repo (also base64)
+      3. token.pickle in the repo - RAW pickle bytes, written by run_daily.py
+    So try each in turn and unpickle whichever actually works.
+    """
+    candidates = []
+
+    env_token = os.environ.get("YOUTUBE_TOKEN_B64")
+    if env_token:
+        candidates.append(env_token.strip())
+
+    if os.path.exists(TOKEN_PATH):
         with open(TOKEN_PATH, encoding="utf-8") as f:
-            raw = f.read().strip()
-    if not raw:
-        raise RuntimeError("no YOUTUBE_TOKEN_B64 available")
+            candidates.append(f.read().strip())
+
+    raw_pickle = os.path.join(BASE_DIR, "token.pickle")
+    if os.path.exists(raw_pickle):
+        with open(raw_pickle, "rb") as f:
+            return pickle.load(f)      # already raw bytes, nothing to decode
+
+    errors = []
+    for raw in candidates:
+        for attempt in (raw, _b64(raw)):
+            if not attempt:
+                continue
+            try:
+                creds = pickle.loads(attempt)
+                if hasattr(creds, "refresh_token"):
+                    return creds
+            except Exception as e:
+                errors.append(str(e))
+    raise RuntimeError(f"could not load YouTube credentials ({errors[:2]})")
+
+
+def _b64(text):
+    """Base64-decode tolerantly: secrets often arrive with whitespace/padding."""
+    compact = "".join(str(text).split())
+    if not compact:
+        return None
+    compact += "=" * (-len(compact) % 4)
     try:
-        blob = base64.b64decode(raw, validate=True)
+        return base64.b64decode(compact, validate=False)
     except Exception:
-        blob = raw.encode()
-    return pickle.loads(blob)
+        return None
 
 
 def _youtube_client():
