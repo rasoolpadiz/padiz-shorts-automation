@@ -37,10 +37,39 @@ def _save_state(state):
         json.dump(state, f, ensure_ascii=False, indent=2)
 
 
-def pick_topics(topics, state):
-    """Alternate EN/FA and always prefer a topic the channel has never published."""
+def _posted_today(state):
+    """The id of any long video already published today, or None.
+
+    This is the real once-per-day brake. The workflow runs several catch-up
+    crons because GitHub's scheduler is unreliable (it fired 5h49m late on
+    2026-09-30 and was skipped entirely on 2026-10-01), so without this guard a
+    late second run would happily publish a second video the same day.
+    """
     today = date.today().isoformat()
-    order = ["en", "fa"] if len(state.get("posted", {})) % 2 == 0 else ["fa", "en"]
+    for topic_id, when in (state.get("posted") or {}).items():
+        if when == today:
+            return topic_id
+    return None
+
+
+def _last_posted_lang(state):
+    """Language of the most recently published long video ('en'/'fa'/None)."""
+    posted = state.get("posted") or {}
+    if not posted:
+        return None
+    latest = max(posted.items(), key=lambda kv: kv[1])
+    return "en" if str(latest[0]).startswith("en") else "fa"
+
+
+def pick_topics(topics, state):
+    """Alternate EN/FA day by day and never repeat a published topic.
+
+    Alternation keys off the LAST PUBLISHED LANGUAGE rather than an arbitrary
+    count, so a failed or retried run can never flip the order twice.
+    """
+    today = date.today().isoformat()
+    last = _last_posted_lang(state)
+    order = ["fa", "en"] if last == "en" else ["en", "fa"]
     posted = state.get("posted", {})
     picked = []
     for lang in order:
@@ -83,6 +112,14 @@ def main(argv=None):
     wanted = None
     if "--topic" in argv:
         wanted = argv[argv.index("--topic") + 1]
+
+    # Strict once-per-day brake. Several catch-up crons exist because GitHub's
+    # scheduler is unreliable, so without this the 2nd cron of the day would
+    # publish a 2nd video. --force overrides it for a deliberate manual re-run.
+    already = _posted_today(state)
+    if already and "--force" not in argv and "--render" not in argv:
+        print(f"[long] already published today ({already}) - nothing to do")
+        return 0
 
     if wanted:
         targets = [t for t in topics if t["id"] == wanted]
