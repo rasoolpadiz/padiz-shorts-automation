@@ -86,6 +86,9 @@ def main(argv=None):
 
     if wanted:
         targets = [t for t in topics if t["id"] == wanted]
+    elif "--render" in argv:
+        # Render-only smoke test: build without uploading, never touch state.
+        targets = pick_topics(topics, state)
     elif "--list" in argv or not argv:
         for t in topics:
             _safe(f"{t['id']:24} {t['lang']:3} {len(t['scenes']):3} scenes  {t['title'][:60]}")

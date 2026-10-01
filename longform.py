@@ -680,6 +680,15 @@ def load_topics():
             topics.extend(getattr(mod, var))
         except Exception as e:
             print(f"[long] {mod_name} not available ({e})")
+    # Topics written by gen_topics.py (niche -> full 22-scene script).
+    try:
+        import gen_topics
+        generated = gen_topics.load_generated()
+        known = {t["id"] for t in topics}
+        topics.extend(t for t in generated if t["id"] not in known)
+        print(f"[long] {len(generated)} generated topics available")
+    except Exception as e:
+        print(f"[long] generated topics unavailable ({e})")
     return topics
 
 

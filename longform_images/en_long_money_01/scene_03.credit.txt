@@ -1,3 +1,3 @@
-Wikimedia/cc0/Ratnakluxurycardealer.bio
-https://upload.wikimedia.org/wikipedia/commons/a/a6/Ratnak_Luxury_Car_Dealer_Logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled
+Openverse/cc0/Gary Lee Todd, Ph.D.
+https://api.openverse.org/v1/images/fc937925-f583-43f5-960a-c386004695f9/thumb/?full_size=true
 luxury car
