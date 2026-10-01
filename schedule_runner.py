@@ -123,6 +123,8 @@ def run_today(dry_run=False):
     اجرای امروز:
     - روز فرد: انگلیسی (فیلم بلند + شورت‌ها)
     - روز زوج: فارسی (فیلم بلند + شورت‌ها)
+    
+    حداکثر 5 شورت در روز (owner directive 2026-10-01)
     """
     day_of_month = date.today().day
     is_odd = day_of_month % 2 == 1
@@ -134,7 +136,7 @@ def run_today(dry_run=False):
     if dry_run:
         print("[padiz] (dry-run) اینجا اجرا می‌شود:")
         print(f"  1. فیلم بلند {lang}: python run_long_daily.py --upload --force")
-        print(f"  2. شورت‌های {lang}: python pipeline.py --gen-shorts")
+        print(f"  2. شورت‌های {lang} (حداکثر 5): python run_daily.py (x5)")
         return 0
     
     print(f"\n[padiz] 1️⃣  فیلم بلند {lang}...")
@@ -148,16 +150,21 @@ def run_today(dry_run=False):
     else:
         print(f"[padiz] ⚠️  فیلم بلند ناموفق (کد: {result_long.returncode})")
     
-    print(f"\n[padiz] 2️⃣  شورت‌های {lang}...")
-    result_shorts = subprocess.run(
-        [sys.executable, 'pipeline.py', '--gen-shorts'],
-        cwd=BASE_DIR
-    )
+    # حداکثر 5 شورت در روز
+    MAX_SHORTS = 5
+    print(f"\n[padiz] 2️⃣  شورت‌های {lang} (حداکثر {MAX_SHORTS})...")
     
-    if result_shorts.returncode == 0:
-        print(f"[padiz] ✅ شورت‌ها موفق")
-    else:
-        print(f"[padiz] ⚠️  شورت‌ها ناموفق (کد: {result_shorts.returncode})")
+    for i in range(MAX_SHORTS):
+        print(f"[padiz]   شورت {i+1}/{MAX_SHORTS}...")
+        result_short = subprocess.run(
+            [sys.executable, 'run_daily.py'],
+            cwd=BASE_DIR
+        )
+        
+        if result_short.returncode != 0:
+            print(f"[padiz] ⚠️  شورت {i+1} ناموفق، توقف")
+            break
+        print(f"[padiz] ✅ شورت {i+1} موفق")
     
     print(f"\n[padiz] ✅ اجرای امروز تمام شد")
     return 0

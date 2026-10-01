@@ -28,6 +28,9 @@ TOKEN_PATH = os.path.join(BASE_DIR, "token.pickle")
 # per slot window, so redundant triggers become harmless no-ops.
 MIN_GAP_MINUTES = 90
 
+# Maximum shorts per day (owner directive 2026-10-01)
+MAX_SHORTS_PER_DAY = 5
+
 
 def _today():
     """Today's UTC date, used to keep recently-posted topics out of recycling."""
