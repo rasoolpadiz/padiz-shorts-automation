@@ -161,6 +161,47 @@ def validate(topic, lang):
     return problems
 
 
+
+def _research_brief(lang, niche):
+    """What discovery found online inside this niche, as a writer's brief.
+
+    Owner directive 2026-10-01: stop handing the writer a bare niche - give it
+    the story that is actually hot right now. Returns "" when nothing is cached,
+    so the writer behaves exactly as before.
+    """
+    try:
+        import discover as D
+        items = (D._json_load(D.POOL_PATH, {}).get(lang) or {}).get("items", [])
+    except Exception:
+        return ""
+    picked = [i for i in items if i.get("niche") == niche][:5]
+    if not picked:
+        picked = items[:5]
+    if not picked:
+        return ""
+    lines = []
+    for it in picked:
+        vel = it.get("velocity") or 0
+        lines.append(
+            f'- "{it["title"]}" ({it.get("source","")}, {it.get("views",0):,} views,'
+            f' {vel:,.0f} views/hour)'
+        )
+    head = (
+        'REAL-WORLD RESEARCH (found online today, use as raw material - do NOT copy '
+        'these videos, do NOT mention other channels or their titles):\n'
+        if lang == "en" else
+        'تحقیق واقعی (امروز از اینترنت پیدا شده - مادهٔ خام توست، ویدیوها را کپی نکن و اسم کانال\u200cهای دیگر را نبر):\n'
+    )
+    tail = (
+        "\nTurn the strongest of these angles into an ORIGINAL story for our own "
+        "audience. Add your own analysis, numbers and examples."
+        if lang == "en" else
+        '\nقویت\u200cترین زاویه را به داستانی تازه برای مخاطب خودمان تبدیل کن. تحلیل، عدد و مثال خودت را اضافه کن.'
+    )
+
+    return head + "\n".join(lines) + tail
+
+
 def _prompt(lang, niche):
     w = WORDS_PER_SCENE[lang]
     hook = HOOK_EN if lang == "en" else HOOK_FA
@@ -220,9 +261,11 @@ Writing rules:
 - «text»: فقط یک جملهٔ کوتاه روی تصویر، حداکثر ۸ کلمه
 - «image_query»: ۳ تا ۵ کلمه توصیف عکس واقعی از یک مکان یا شیء واقعی.
   هرگز نمودار، چارت، نقشه، اسکن، سند، روزنامه یا اینفوگرافیک نباشد."""
+    brief = _research_brief(lang, niche)
+    research_block = f"\n{brief}\n" if brief else ""
     return f"""You are the head writer for a high-retention YouTube channel.
 Channel: "Padiz Studio". Approved content niche for this video: **{niche}**.
-
+{research_block}
 {shape}
 
 Return ONLY valid JSON, no markdown fence, no commentary, in exactly this shape:

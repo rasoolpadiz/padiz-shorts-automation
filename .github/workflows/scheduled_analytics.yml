@@ -40,14 +40,38 @@ jobs:
         run: |
           python analytics.py || echo "::warning::analytics collection failed - pickers will use the default order"
 
-      - name: Commit analytics snapshot
+      - name: Commit analytics + discovery state
         run: |
           git config --global user.name "Padiz Automation Bot"
           git config --global user.email "bot@padiz.local"
-          git add -f analytics_history.json
+          git add -f analytics_history.json discovery_pool.json discovery_quota.json
           if git diff --staged --quiet; then
             echo "No change."
           else
-            git commit -m "chore: analytics snapshot [skip ci]"
+            git commit -m "chore: analytics + discovery snapshot [skip ci]"
             git push origin HEAD:main
           fi
+
+      # What is hot RIGHT NOW inside the owner's approved niches. The writer
+      # (gen_topics) reads discovery_pool.json as its research brief.
+      # Read-only, and skipped automatically if it fails - the daily video must
+      # never be blocked by discovery.
+      - name: Discover hot topics on the internet
+        env:
+          YOUTUBE_TOKEN_B64: ${{ secrets.YOUTUBE_TOKEN_B64 }}
+        run: |
+          for LANG in fa en; do
+            python discover.py --lang "$LANG" --niches 2 \
+              || echo "::warning::discovery failed for $LANG - writers use the plain niche"
+          done
+
+      - name: Commit discovery pool
+        run: |
+          git add -f discovery_pool.json discovery_quota.json
+          if git diff --staged --quiet; then
+            echo "No change."
+          else
+            git commit -m "chore: discovery pool [skip ci]"
+            git push origin HEAD:main
+          fi
+
