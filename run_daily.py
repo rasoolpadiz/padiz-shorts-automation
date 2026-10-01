@@ -140,22 +140,11 @@ def pick_next_topic(posted_records):
 
 
 def _niche_allowed(item, lang):
-    """SHORTS NICHE LOCK (owner directive 2026-10-02): only the two proven winners.
-
-    Data: طنز روزمره score 6.9, روانشناسی رابطه score 6.7 - everything else < 3.2.
-    FA: only روانشناسی/طنز categories. EN mirrors: psychology/relationships/dating/
-    love + comedy/humor/entertainment. Set PADIZ_SHORTS_ALL_NICHES=1 to unlock all.
+    """Niche gate for Shorts. The 2026-10-02 lock (psy+comedy only) was REVERTED
+    per owner request - all approved niches are usable again. Keep the function
+    so future experiments can re-enable filtering in one place.
     """
-    if os.environ.get("PADIZ_SHORTS_ALL_NICHES", "") == "1":
-        return True
-    cat = str((item or {}).get("category", "")).lower()
-    niche = str((item or {}).get("niche", "")).lower()
-    blob = cat + " " + niche
-    if lang == "fa":
-        return ("روانشناسی" in blob) or ("طنز" in blob)
-    want = ("psycholog", "relation", "dating", "love",
-            "comedy", "humor", "humour", "entertain", "funny")
-    return any(w in blob for w in want)
+    return True
 
 
 def main():
