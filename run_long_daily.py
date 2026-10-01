@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """Daily long-form (16:9) runner for Padiz.
 
-Builds + uploads ONE long video per day (>= 8 min, mid-roll eligible),
+Builds + uploads ONE long video per day (8-10 min, mid-roll eligible),
 alternating English / Persian pools so both channels stay warm.
+Primary slot: 12:00 UTC = 15:30 Tehran (best for both monetization + discovery).
 State lives in longform_out/posted_long.json (auto-committed by CI).
 """
 import json

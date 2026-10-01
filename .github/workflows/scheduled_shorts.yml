@@ -2,12 +2,12 @@ name: Padiz 24/7 Shorts Automation
 
 on:
   schedule:
-    # Runs 5 times a day (UTC times -> Tehran times UTC+3:30):
-    # 06:00 UTC = 09:30 Tehran
-    # 10:00 UTC = 13:30 Tehran
-    # 14:00 UTC = 17:30 Tehran
-    # 17:00 UTC = 20:30 Tehran
-    # 20:00 UTC = 23:30 Tehran
+    # Runs 5 times a day (UTC -> Tehran UTC+3:30), language forced by slot:
+    # 06:00 UTC = 09:30 Tehran -> EN (EU morning / US overnight push)
+    # 10:00 UTC = 13:30 Tehran -> FA (Iran lunch peak)
+    # 14:00 UTC = 17:30 Tehran -> EN (EU lunch / US morning peak)
+    # 17:00 UTC = 20:30 Tehran -> FA (Iran evening prime)
+    # 20:00 UTC = 23:30 Tehran -> FA (Iran late-evening prime)
     - cron: '0 6,10,14,17,20 * * *'
   workflow_dispatch:
     inputs:
@@ -16,7 +16,7 @@ on:
         type: boolean
         default: false
       force_lang:
-        description: "Force language: fa | en | empty=alternate"
+        description: "Force language: fa | en | empty=slot schedule"
         type: choice
         options: ["", fa, en]
         default: ""
@@ -77,7 +77,7 @@ jobs:
         env:
           YOUTUBE_TOKEN_B64: ${{ secrets.YOUTUBE_TOKEN_B64 }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          # FORCE_LANG: fa | en | empty (empty = alternate FA/EN each run)
+          # FORCE_LANG: fa | en | empty (empty = slot->lang forcing by UTC hour)
           FORCE_LANG: ${{ inputs.force_lang || '' }}
         run: |
           python run_daily.py

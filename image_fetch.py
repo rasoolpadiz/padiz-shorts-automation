@@ -73,6 +73,36 @@ def save_used_registry(hashes):
         json.dump(sorted(hashes), f, indent=1)
 
 
+def prune_topic_images(topic_id, keep_thumbnail=True):
+    """Delete scene_*.jpg after a successful upload to keep the repo light.
+
+    Keeps .credit.txt files (attribution proof) and, when keep_thumbnail=True,
+    keeps scene_01.jpg for thumbnail reuse. No-ops when the folder is missing.
+    Returns the number of files deleted.
+    """
+    folder = os.path.join(IMG_ROOT, topic_id)
+    if not os.path.isdir(folder):
+        return 0
+    deleted = 0
+    try:
+        names = sorted(os.listdir(folder))
+    except OSError:
+        return 0
+    for name in names:
+        if not (name.startswith("scene_") and name.endswith(".jpg")):
+            continue  # keep .credit.txt and everything else
+        if keep_thumbnail and name == "scene_01.jpg":
+            continue  # thumbnail reuse
+        try:
+            os.remove(os.path.join(folder, name))
+            deleted += 1
+        except OSError:
+            continue
+    if deleted:
+        _log(f"  [img] pruned {deleted} scene images for {topic_id}")
+    return deleted
+
+
 def _log(msg):
     """Print safely - Windows consoles choke on non-ascii credits."""
     try:

@@ -57,13 +57,33 @@ def font_for(text: str, size: int):
         return ImageFont.truetype(FONT_PATH, size)
 
 
-def draw_smart(draw, xy, text: str, font, fill, anchor: str = "mm"):
-    """RTL shaping for Persian, plain LTR for English."""
+def draw_smart(draw, xy, text: str, font, fill, anchor: str = "mm", max_width: int = None):
+    """RTL shaping for Persian, plain LTR for English.
+
+    SIDE_PAD=90: x is clamped so centre-anchored text can never be cut off
+    at the left/right edges (canvas width inferred as 2*x for mm anchors).
+    When max_width is given and the line is too wide, it is truncated with
+    an ellipsis instead of overflowing.
+    """
+    SIDE_PAD = 90
+    x, y = xy
+    try:
+        canvas_w = draw.im.size[0] if hasattr(draw, "im") else 1080
+    except Exception:
+        canvas_w = 1080
+    if anchor.endswith("m") or anchor.endswith("a"):
+        # centre/middle anchors: keep centre inside the safe zone
+        lo = SIDE_PAD if "m" in anchor or "a" in anchor else SIDE_PAD
+        x = max(lo, min(canvas_w - SIDE_PAD, x))
     if is_fa_text(text):
-        draw_persian(draw, xy, text, font, fill, anchor=anchor)
+        if max_width is not None:
+            text = _fit_line(draw, text, font, max_width)
+        draw_persian(draw, (x, y), text, font, fill, anchor=anchor)
     else:
         clean = re.sub(r'[\U00010000-\U0010ffff]', '', text or '').strip()
-        draw.text(xy, clean, font=font, fill=fill, anchor=anchor)
+        if max_width is not None:
+            clean = _fit_line(draw, clean, font, max_width)
+        draw.text((x, y), clean, font=font, fill=fill, anchor=anchor)
 
 # Pillow builds that ship libraqm already run HarfBuzz (letter joining) and
 # FriBidi (right-to-left reordering) internally, so feeding them text that was
@@ -96,6 +116,75 @@ def draw_persian(draw, xy, text: str, font, fill, anchor: str = "mm"):
         kwargs["direction"] = "rtl"
         kwargs["language"] = "fa"
     draw.text(xy, prepare_bidi_text(text), **kwargs)
+
+# --- Measured wrap / fit helpers (same idea as longform._wrap_to_width) ----
+def _measure(draw, s, font):
+    try:
+        return draw.textlength(s, font=font)
+    except Exception:
+        return float(len(s or "") * getattr(font, "size", 40) * 0.6)
+
+
+def _fit_line(draw, s, font, max_width):
+    """Truncate one line with ellipsis so it fits max_width (measured)."""
+    if _measure(draw, s, font) <= max_width:
+        return s
+    ell = " ..."
+    while s and _measure(draw, s + ell, font) > max_width:
+        s = s[:-1].rstrip()
+    return (s + ell) if s else ell.strip()
+
+
+def _wrap_to_width(draw, text, font, max_width, max_lines=4):
+    """Real measured word-wrap (char-count wrapping clipped Persian)."""
+    words = (text or "").split()
+    lines, cur = [], []
+    for w in words:
+        trial = " ".join(cur + [w])
+        if _measure(draw, trial, font) <= max_width or not cur:
+            cur.append(w)
+        else:
+            lines.append(" ".join(cur))
+            cur = [w]
+            if len(lines) == max_lines:
+                break
+    if cur and len(lines) < max_lines:
+        lines.append(" ".join(cur))
+    if len(lines) == max_lines and len(words) > sum(len(l.split()) for l in lines):
+        lines[-1] = _fit_line(draw, lines[-1], font, max_width)
+    return lines
+
+
+# --- Mood palettes for SHORTS (mirrors longform._MOOD_PALETTES) ------------
+_SHORTS_MOODS = {
+    "money":   {"accent": (240, 180, 41),  "topbar": (198, 138, 20)},
+    "mystery": {"accent": (168, 85, 247),  "topbar": (126, 58, 196)},
+    "science": {"accent": (56, 189, 248),   "topbar": (14, 116, 190)},
+    "history": {"accent": (214, 158, 84),  "topbar": (154, 103, 46)},
+    "dark":    {"accent": (220, 38, 38),   "topbar": (153, 27, 27)},
+    "nature":  {"accent": (52, 211, 153),   "topbar": (5, 150, 105)},
+}
+_SHORTS_MOOD_WORDS = {
+    "money": ["money", "finance", "invest", "wealth", "econom", "business", "crypto",
+              "startup", "entrepreneur", "ثروت", "پول", "مالی", "سرمایه", "اقتصاد", "کسب"],
+    "mystery": ["mystery", "unsolved", "conspiracy", "crime", "horror", "secret",
+                "vanished", "enigma", "occult", "راز", "معما", "جنایت", "ترسناک", "مخوف"],
+    "science": ["science", "space", "ai", "tech", "robot", "medical", "physics", "future",
+                "software", "cyber", "علم", "فضا", "هوش", "تکنولوژی", "ربات", "مغز", "دانشمند"],
+    "history": ["history", "ancient", "civilization", "archaeolog", "empire", "medieval",
+                "heritage", "تاریخ", "باستان", "تمدن", "امپراتور", "جنگ", "ایران"],
+    "dark": ["dark", "war", "death", "danger", "killer", "مرگ", "جنگ", "خطر", "قتل", "تاریک"],
+    "nature": ["nature", "animal", "food", "health", "fitness", "earth", "ocean", "climate",
+               "طبیعت", "حیوان", "سلامت", "غذا", "اقیانوس", "زمین"],
+}
+
+
+def detect_shorts_mood(category: str, title: str = "", text: str = "") -> str:
+    hay = f"{category or ''} {title or ''} {text or ''}".lower()
+    for mood, words in _SHORTS_MOOD_WORDS.items():
+        if any(w in hay for w in words):
+            return mood
+    return "science"
 
 def create_slide_image(category: str, title: str, text: str, slide_num: int, total_slides: int, output_path: str, lang: str = None):
     # Theme per language: FA keeps the EXACT legacy look, EN gets its own
@@ -139,6 +228,16 @@ def create_slide_image(category: str, title: str, text: str, slide_num: int, tot
             "btn_text": (255, 255, 255),
         }
 
+    mood = detect_shorts_mood(category, title, text)
+    _mood = _SHORTS_MOODS.get(mood, _SHORTS_MOODS["science"])
+    # Mood varies ONLY the accent/topbar/title: FA keeps navy bg + gold title
+    # base, EN keeps teal bg base. Mood tints the topbar + divider + progress
+    # so every niche feels different without losing language identity.
+    THEME["topbar"] = _mood["topbar"]
+    THEME["progress"] = _mood["accent"]
+    THEME["divider"] = _mood["accent"]
+    THEME["_mood"] = mood
+
     width, height = 1080, 1920
     img = Image.new("RGB", (width, height), color=THEME["bg"])
     draw = ImageDraw.Draw(img)
@@ -154,24 +253,39 @@ def create_slide_image(category: str, title: str, text: str, slide_num: int, tot
     card_bottom = 1500
     draw.rounded_rectangle([(card_margin, card_top), (width - card_margin, card_bottom)], radius=40, fill=THEME["card_fill"], outline=THEME["card_outline"], width=4)
 
-    title_font = font_for(title, 54)
-    draw_smart(draw, (width // 2, card_top + 130), title, title_font, THEME["title"])
+    SAFE_W = width - 90 * 2  # 90px side padding: nothing may touch the edges
+
+    title_font = font_for(title, 64)
+    # Auto-shrink the title until it fits (measured, not char-counted),
+    # then wrap to max 2 lines like longform.
+    while title_font.size > 40 and _measure(
+            ImageDraw.Draw(Image.new("RGB", (8, 8))), title, title_font) > SAFE_W * 2:
+        title_font = font_for(title, title_font.size - 4)
+    title_lines = _wrap_to_width(draw, title, title_font, SAFE_W, max_lines=2)
+    ty = card_top + 100
+    for tl in title_lines:
+        draw_smart(draw, (width // 2, ty), tl, title_font, THEME["title"],
+                   max_width=SAFE_W)
+        ty += int(title_font.size * 1.25)
 
     draw.line([(card_margin + 60, card_top + 210), (width - card_margin - 60, card_top + 210)], fill=THEME["divider"], width=2)
 
     content_font = font_for(text, 46)
-    max_chars = 22 if is_fa_text(text) else 30
-    words = text.split()
-    lines, curr_line = [], []
-    for word in words:
-        test_line = " ".join(curr_line + [word])
-        if len(test_line) > max_chars:
-            lines.append(" ".join(curr_line))
-            curr_line = [word]
+    body_lines = _wrap_to_width(draw, text, content_font, SAFE_W, max_lines=3)
+    # Auto-shrink body if 3 lines still overflow vertically.
+    while len(body_lines) >= 3 and content_font.size > 34:
+        probe = _wrap_to_width(draw, text, font_for(text, content_font.size - 4),
+                               SAFE_W, max_lines=3)
+        if sum(1 for _ in probe) < 4:
+            content_font = font_for(text, content_font.size - 4)
+            body_lines = probe
+            if len(body_lines) <= 3:
+                break
         else:
-            curr_line.append(word)
-    if curr_line:
-        lines.append(" ".join(curr_line))
+            break
+        if content_font.size <= 34:
+            break
+    lines = body_lines
 
     line_height = 80
     total_h = len(lines) * line_height
@@ -179,7 +293,16 @@ def create_slide_image(category: str, title: str, text: str, slide_num: int, tot
 
     for i, line in enumerate(lines):
         y = start_y + (i * line_height)
-        draw_smart(draw, (width // 2, y), line, content_font, THEME["body"])
+        draw_smart(draw, (width // 2, y), line, content_font, THEME["body"],
+                   max_width=SAFE_W)
+
+    # Mood accent bar under the body block (shorts "designed detail").
+    bar_w = min(int(max((_measure(draw, l, content_font) for l in lines),
+                        default=0)) + 60, SAFE_W)
+    draw.rounded_rectangle(
+        [(width / 2 - bar_w / 2, start_y + len(lines) * line_height + 18),
+         (width / 2 + bar_w / 2, start_y + len(lines) * line_height + 30)],
+        radius=6, fill=THEME["divider"])
 
     progress_font = font_for("test", 34)
     sub_font = font_for("Subscribe", 42)
@@ -190,6 +313,78 @@ def create_slide_image(category: str, title: str, text: str, slide_num: int, tot
     draw_smart(draw, (width // 2, card_bottom - 70), progress_txt, progress_font, THEME["progress"])
 
     img.save(output_path, quality=95)
+    return output_path
+
+
+def create_shorts_thumbnail(topic: dict, out_path: str) -> str:
+    """1080x1920 Shorts cover: hard scrim + 2-4 word display hook + accent bar.
+
+    Mirrors longform.create_thumbnail language at vertical aspect so the
+    Shorts shelf cover matches the video design.
+    """
+    try:
+        import fonts as F
+    except Exception:
+        F = None
+    W, H = 1080, 1920
+    lang = (topic.get("lang") or ("en" if not is_fa_text(
+        str(topic.get("title", ""))) else "fa")).lower()
+    mood = detect_shorts_mood(str(topic.get("category", "")),
+                              str(topic.get("title", "")))
+    accent = _SHORTS_MOODS.get(mood, _SHORTS_MOODS["science"])["accent"]
+    base_bg = (4, 26, 34) if lang.startswith("en") else (15, 23, 42)
+    img = Image.new("RGB", (W, H), color=base_bg)
+    draw = ImageDraw.Draw(img, "RGBA")
+    # Hard scrim: dark bottom 2/3 where the hook sits.
+    for y in range(H):
+        t = y / max(H - 1, 1)
+        a = int(40 + (215 - 40) * (t ** 1.6))
+        draw.line([(0, y), (W, y)], fill=(0, 0, 0, min(225, a)))
+    # Mood topbar + accent bar identity.
+    draw.rectangle([(0, 0), (W, 26)],
+                   fill=_SHORTS_MOODS.get(mood)["topbar"])
+    hook = str(topic.get("thumbnail_text") or topic.get("title", "") or "")
+    hook = re.sub(r"#shorts", "", hook, flags=re.I).strip()
+    words = hook.split()
+    if len(words) > 4:
+        hook = " ".join(words[:4])
+    SAFE_W = W - 180
+    size, lines, font = 150, [hook], None
+    while size >= 120:
+        f = (F.display(size, hook) if F else font_for(hook, size))
+        trial = _wrap_to_width(draw, hook, f, SAFE_W, max_lines=3)
+        widest = max((_measure(draw, l, f) for l in trial), default=0)
+        if len(trial) <= 3 and widest <= SAFE_W:
+            lines, font, size_used = trial, f, size
+            break
+        size -= 6
+    else:
+        font = (F.display(120, hook) if F else font_for(hook, 120))
+        lines = _wrap_to_width(draw, hook, font, SAFE_W, max_lines=3)
+        size_used = 120
+    line_h = int(size_used * 1.16)
+    y0 = (H - line_h * len(lines)) // 2
+    for i, line in enumerate(lines):
+        yy = y0 + i * line_h
+        # hard shadow for readability at small sizes
+        try:
+            draw.text((W / 2 + 7, yy + 7), line, font=font,
+                      fill=(0, 0, 0, 220), anchor="ma")
+        except Exception:
+            pass
+        draw_smart(draw, (W / 2, yy), line, font, (255, 255, 255),
+                   anchor="ma", max_width=SAFE_W)
+    bar_y = y0 + len(lines) * line_h + 24
+    bar_w = min(int(max((_measure(draw, l, font) for l in lines),
+                        default=0)) + 60, SAFE_W)
+    draw.rounded_rectangle([(W / 2 - bar_w / 2, bar_y),
+                            (W / 2 + bar_w / 2, bar_y + 14)],
+                           radius=7, fill=accent)
+    bf = (F.display(40, "Padiz") if F else font_for("Padiz", 40))
+    draw_smart(draw, (W / 2, H - 140), "PADIZ STUDIO", bf,
+               (255, 255, 255))
+    img.save(out_path, quality=95)
+    return out_path
 
 async def generate_voice_edge(text: str, voice: str, output_path: str):
     """Fallback narration using edge-tts.

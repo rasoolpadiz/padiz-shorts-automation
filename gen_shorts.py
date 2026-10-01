@@ -156,13 +156,40 @@ def _normalize(data, lang, niche, discovery, topic_id):
         data["discovered_from"] = str(discovery.get("title", ""))[:80]
     except Exception:
         data["discovered_from"] = ""
-    data.setdefault("description", "")
     data.setdefault("tags", ["shorts", "padiz_studio"])
     data["title"] = str(data["title"]).strip()
     if "#shorts" not in data["title"].lower():
         data["title"] += " #shorts"
+    # Hook-y title guard: keep the #shorts suffix glued at the very end and
+    # cap the visible hook at ~70 chars so the first 5 words stay punchy.
+    else:
+        data["title"] = re.sub(r"\s*#shorts\s*", "", data["title"],
+                               flags=re.I).strip() + " #shorts"
     for s in data["slides"]:
         s["image_query"] = s.get("image_query") or f"{niche} real photo"
+    # --- SEO packaging (never empty / never missing tags) -------------------
+    hook = re.sub(r"\s*#shorts\s*", "", data["title"], flags=re.I).strip()
+    if lang == "fa":
+        cta = "👇 نظرت رو کامنت کن! 🔔 سابسکرایب کن تا ویدیوی بعدی رو از دست ندی!"
+        tags = ["#shorts", "#فارسی", "#ترند", "#پادیز",
+                "#دانستنی", "#فکت", "#padiz_studio"]
+        desc = (f"{hook}\n\n{cta}\n\n🌟 پادیز استودیو | کلیپ‌های روزانه\n"
+                f"👉 https://instagram.com/padiz_studio\n\n"
+                + " ".join(tags))
+    else:
+        cta = "👇 Comment below! 🔔 Subscribe so you never miss the next one!"
+        tags = ["#shorts", "#trending", "#facts", "#viral", "#padiz_studio"]
+        desc = (f"{hook}\n\n{cta}\n\n🌟 Padiz Studio | daily clips\n"
+                f"👉 https://instagram.com/padiz_studio\n\n"
+                + " ".join(tags))
+    data["description"] = desc
+    seen, merged = set(), []
+    for t in list(data.get("tags") or []) + [t.lstrip("#") for t in tags]:
+        tl = str(t).strip().lower()
+        if tl and tl not in seen:
+            seen.add(tl)
+            merged.append(t)
+    data["tags"] = merged[:15]
     return data
 
 

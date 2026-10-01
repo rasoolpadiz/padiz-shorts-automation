@@ -2,13 +2,14 @@
 """Turn an approved niche into a complete, ready-to-render long-form topic.
 
 The owner supplies the niche lists (topics_niches.py: 85 EN / 19 FA). This module
-writes full 22-scene topics into topics_generated/ so the daily runner always has
+writes full 14-scene topics into topics_generated/ so the daily runner always has
 fresh material and never repeats a topic.
 
 Design rules baked into the prompt (DESIGN_SPEC.md):
   * scene 1 is a 0-15s cold open: pattern interrupt -> beat -> promise
   * every 3-4 scenes there is a curiosity gap or a list promise
-  * scenes breathe: 22 scenes x ~22 words of narration = ~9 minutes
+  * scenes breathe: 14 scenes x ~90-100 words of narration = ~8-10 minutes
+    (at ~150wpm, 8-10 min = 1200-1500 words, so 14 x ~95 = ~1330 words)
   * Persian narration is written for the ear, not for the page
 """
 import json
@@ -24,12 +25,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 GEN_DIR = os.path.join(HERE, "topics_generated")
 USED_NICHES = os.path.join(GEN_DIR, "used_niches.json")
 
-SCENES = 22
-# Target words per scene when the writer is generating. Hand-written long-form
-# scenes legitimately run longer (a 22-scene script at ~65 words is what produced
-# the 8-minute videos), so the hard rejection ceiling sits well above the target.
-WORDS_PER_SCENE = {"en": 24, "fa": 20}
-MAX_WORDS_PER_SCENE = {"en": 150, "fa": 130}
+SCENES = 14
+# Target words per scene when the writer is generating. At ~150wpm an 8-10 min
+# video needs 1200-1500 words, so 14 scenes x ~90-100 words = ~1260-1400 words.
+WORDS_PER_SCENE = {"en": 95, "fa": 90}
+MAX_WORDS_PER_SCENE = {"en": 160, "fa": 150}
 
 HOOK_EN = """\
 OPEN with a cold open that wins the first 15 seconds:
@@ -204,59 +204,11 @@ def _fallback_scene(idx, lang, niche):
                 "speech": "یک شرکت ۲۰۰ نفری این اصل رو پیاده کرد. نتیجه: در ۹ ماه، نرخ بازده کارکنان ۶۰ درصد رشد پیدا کرد.",
             },
             14: {
-                "title": "ضدِ استدلال",
-                "text": "شاید این کار نمی‌کند؟",
-                "image_query": f"{niche} شک و تردید",
-                "speech": "تعدادی می‌گویند: این مدل برای تمام موقعیت‌ها کار نمی‌کنه. درست‌اند. اما حتی ۳۰ درصد بهتری، ۳۰ درصده.",
-            },
-            15: {
-                "title": "اما پیروزی می‌رسد",
-                "text": "دلیل فوقالعاده‌بودن این روش",
-                "image_query": f"{niche} موفقیت",
-                "speech": "حالا به قسمتی می‌رسیم که واقعاً مهمه: چرا این روش برتری دارد؟ زیرا با زمان سازگیر است، نه پریشان.",
-            },
-            16: {
-                "title": "راه‌حل عملی ۱",
-                "text": "مرحلهٔ نخست",
-                "image_query": f"{niche} شروع کار",
-                "speech": "مرحلهٔ اول: جایی خالی کن برای تغییر. بیشتر آدم‌ها می‌خوان هم‌زمان یاد بگیرند و اجرا کنند. ممکن نیست.",
-            },
-            17: {
-                "title": "راه‌حل عملی ۲",
-                "text": "اجرا مرحله‌ای",
-                "image_query": f"{niche} پیشرفت مرحله‌ای",
-                "speech": "دوم: کوچک شروع کن. فقط یک فرآیند را تغییر بده. اثر را اندازه بگیر. سپس بعدی.",
-            },
-            18: {
-                "title": "راه‌حل عملی ۳",
-                "text": "دریافت بازخورد",
-                "image_query": f"{niche} ارزیابی",
-                "speech": "سوم: هر دو هفته بازخورد بگیر. هر چیز‌ی که سنجش نمی‌شه، نمی‌رسه. چند بار ارزیابی دارید؟",
-            },
-            19: {
-                "title": "اثر بلندمدت",
-                "text": "ماه اول تا سال سوم",
-                "image_query": f"{niche} رشد طولانی‌مدت",
-                "speech": "ماه اول: ۵ درصد بهتری. ماه ششم: ۲۰ درصد. سال دوم: ۵۰ درصد. این نمو مرکب است.",
-            },
-            20: {
-                "title": "خطر‌ناکترین اشتباه",
-                "text": "حتی بعد از دانستن این همه",
-                "image_query": f"{niche} هشدار",
-                "speech": "خطرناک‌ترین اشتباهی که می‌شه انجام داد: شنیدی، فهمیدی، اما عمل نکردی. اکثر آدم‌ها اینجاند.",
-            },
-            21: {
-                "title": "نتیجهٔ بلندمدت",
-                "text": "آینده‌ی شما ۳۰ روز بعد",
-                "image_query": f"{niche} آینده‌ی روشن",
-                "speech": "اگر امروز شروع کنی، سی روز بعد خود‌ت معمول نیست. سال بعد؟ تقریباً شناخت‌نشدنی.",
-            },
-            22: {
                 "title": "اقدام مشخص",
                 "text": "یک کاری بکن الآن",
                 "image_query": f"{niche} اقدام فوری",
-                "speech": "امروز: یک کاری کن. فقط یک. اگر موافق بودی اینجا رو دنبال کن، دوباره سابسکرایب کن و زنگ را فعال کن. ببینیم کی تغییر می‌افتد.",
-            }
+                "speech": "اگر امروز شروع کنی، سی روز بعد خودت معمول نیست. سال بعد؟ تقریباً شناخت‌نشدنی. پس امروز فقط یک کاری کن. اگر موافق بودی اینجا رو دنبال کن، سابسکرایب کن و زنگ را فعال کن تا تغییر را ببینی.",
+            },
         }
         
         if idx in scenes_fa:
@@ -291,7 +243,9 @@ def validate(topic, lang):
     if not topic or not topic.get("title"):
         problems.append("missing title")
     scenes = (topic or {}).get("scenes") or []
-    if len(scenes) != SCENES:
+    # Legacy 22-scene topics (hand-written, already published style) still pass:
+    # only NEW generation is fixed at 14. Anything far outside both is rejected.
+    if len(scenes) not in (SCENES, 22):
         problems.append(f"expected {SCENES} scenes, got {len(scenes)}")
     for i, s in enumerate(scenes, 1):
         if not s.get("speech", "").strip():
@@ -301,6 +255,11 @@ def validate(topic, lang):
         words = len(str(s.get("speech", "")).split())
         if words > MAX_WORDS_PER_SCENE[lang]:
             problems.append(f"scene {i} too long ({words} words)")
+        # Floor 50 words/scene: 14 NEW scenes x 50 = 700 min floor guard would be
+        # too short alone, but MIN_TOTAL_WORDS (1200) does the real 8-min job;
+        # legacy 22-scene files (~65w/scene) must not trip here.
+        if words < 50:
+            problems.append(f"scene {i} too short ({words} words, need 50+)")
     if len({s.get("image_query", "") for s in scenes}) < len(scenes) * 0.8:
         problems.append("image queries are too repetitive")
     return problems
@@ -352,20 +311,20 @@ def _prompt(lang, niche):
     hook = HOOK_EN if lang == "en" else HOOK_FA
     if lang == "en":
         shape = f"""Write a long-form video script in NATIVE, CONVERSATIONAL English.
-Exactly {SCENES} scenes. Each scene's "speech" must be {w}+ words when spoken
-comfortably - that is what gets the video over 8 minutes.
+Exactly {SCENES} scenes. Each scene's "speech" must be {w}-110 words when spoken
+comfortably - that is what gets the video to 8-10 minutes
+(14 scenes x ~95 words = ~1330 words = ~8.9 min at 150wpm).
 
 Scene roles must follow this retention shape:
   1  cold open (see below) - the most important scene
   2  why this matters / the cost of ignoring it
   3  the core mechanism or the rule
-  4-8  the main body: concrete, specific, one idea per scene
-  9  the first payoff or a surprising reveal
-  10-15  more body, escalate, add a curiosity gap
-  16  the counter-argument, then why it still wins
-  17-20  the practical fixes / takeaways
-  21  the long-term payoff
-  22  a concrete call to action
+  4-7  the main body: concrete, specific, one idea per scene
+  8  the first payoff or a surprising reveal
+  9-11  more body, escalate, add a curiosity gap
+  12  the counter-argument, then why it still wins
+  13  the practical fixes / takeaways + long-term payoff
+  14  a concrete call to action
 
 {hook}
 
@@ -380,20 +339,19 @@ Writing rules:
   Never a diagram, chart, map, scan, document, newspaper or infographic."""
     else:
         shape = f"""یک متن ویدیوی بلند به زبان فارسی طبیعی و محاوره‌ای بنویس.
-دقیقاً {SCENES} صحنه. هر صحنه «speech» باید {w}+ کلمه باشد تا گفتار طبیعی از
-۸ دقیقه بگذرد - همین متن‌ها خوانده می‌شوند، پس برای گوش نوشته شود.
+دقیقاً {SCENES} صحنه. هر صحنه «speech» باید {w} تا ۱۱۰ کلمه باشد تا گفتار طبیعی به
+۸ تا ۱۰ دقیقه برسد (۱۴ صحنه × ~۹۰ کلمه = ~۱۲۶۰ کلمه) - همین متن‌ها خوانده می‌شوند، پس برای گوش نوشته شود.
 
 ساختار نگهدارندهٔ توجه:
   ۱  شروع سرد (پایین) - مهم‌ترین صحنه
   ۲  چرا مهم است / هزینهٔ نادیده گرفتنش
   ۳  مکانیزم یا قانون اصلی
-  ۴-۸  بدنهٔ اصلی: ملموس، مشخص، هر صحنه یک ایده
-  ۹  اولین نتیجه یا یک غافلگیری
-  ۱۰-۱۵ ادامهٔ بدنه با شدت بیشتر و شکاف کنجکاوی
-  ۱۶  ضدِArgument و دلیل اینکه باز هم درست است
-  ۱۷-۲۰ راه‌حل‌ها و نکات عملی
-  ۲۱  نتیجهٔ بلندمدت
-  ۲۲  دعوت به اقدام مشخص
+  ۴-۷  بدنهٔ اصلی: ملموس، مشخص، هر صحنه یک ایده
+  ۸  اولین نتیجه یا یک غافلگیری
+  ۹-۱۱ ادامهٔ بدنه با شدت بیشتر و شکاف کنجکاوی
+  ۱۲  ضدِArgument و دلیل اینکه باز هم درست است
+  ۱۳  راه‌حل‌ها و نکات عملی + نتیجهٔ بلندمدت
+  ۱۴  دعوت به اقدام مشخص
 
 {hook}
 

@@ -426,19 +426,19 @@ def create_thumbnail(topic, out_path, bg_image=None):
     if len(words) > 4:
         hook = " ".join(words[:4])
 
-    size = 132
+    size = 150
     lines = None
-    while size > 44:
+    while size >= 120:
         f = F.display(size, hook)
         trial = _wrap_to_width(draw, hook, f, W - 190, max_lines=3)
         widest = max((draw.textlength(l, font=f) for l in trial), default=0)
-        if len(trial) <= 3 and widest <= W - 190 and len(trial) * size * 1.12 <= 470:
+        if len(trial) <= 3 and widest <= W - 190 and len(trial) * size * 1.12 <= 520:
             lines, size_used = trial, size
             break
         size -= 6
     if lines is None:
-        lines = _wrap_to_width(draw, hook, F.display(60, hook), W - 190, max_lines=3)
-        size_used = 60
+        lines = _wrap_to_width(draw, hook, F.display(120, hook), W - 190, max_lines=3)
+        size_used = 120
 
     font = F.display(size_used, hook)
     line_h = int(size_used * 1.14)
@@ -668,6 +668,18 @@ def upload_long(meta, topic):
         print("[long] custom thumbnail set")
     except Exception as e:
         print(f"[long] thumbnail upload skipped ({e})")
+    # Repo hygiene: scene photos are cached on disk for the render, but keeping
+    # every video's ~14 JPGs bloats the repo. After a SUCCESSFUL upload the
+    # channel-wide _used_images.json already guarantees each new video downloads
+    # FRESH images (cached digests that collide are deleted + refetched), so the
+    # per-topic JPGs can go - keep scene_01.jpg for thumbnail reuse + credits.
+    # Guarded by PADIZ_PRUNE_IMAGES (default ON).
+    if os.environ.get("PADIZ_PRUNE_IMAGES", "1") != "0":
+        try:
+            import image_fetch as _IF
+            _IF.prune_topic_images(topic["id"], keep_thumbnail=True)
+        except Exception as e:
+            print(f"[long] prune skipped ({e})")
     return url
 
 
@@ -680,7 +692,7 @@ def load_topics():
             topics.extend(getattr(mod, var))
         except Exception as e:
             print(f"[long] {mod_name} not available ({e})")
-    # Topics written by gen_topics.py (niche -> full 22-scene script).
+    # Topics written by gen_topics.py (niche -> full 14-scene script).
     try:
         import gen_topics
         generated = gen_topics.load_generated()

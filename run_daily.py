@@ -31,6 +31,42 @@ MIN_GAP_MINUTES = 90
 # Maximum shorts per day (owner directive 2026-10-01)
 MAX_SHORTS_PER_DAY = 5
 
+# Slot -> language forcing (peak-audience schedule, Tehran = UTC+3:30).
+# FA wins Iran peaks: 13:30 lunch + 20:30/23:30 evening (UTC 10,17,20).
+# EN wins US/EU peaks: 09:30 Tehran = EU morning, 17:30 Tehran = EU lunch /
+# US morning (UTC 6,14). Any other hour (manual runs) falls back to alternate.
+FA_SLOT_HOURS_UTC = {10, 17, 20}
+EN_SLOT_HOURS_UTC = {6, 14}
+
+
+def lang_for_utc_hour(h):
+    """Language forced by the UTC cron slot hour (None = no forcing)."""
+    try:
+        h = int(h)
+    except (TypeError, ValueError):
+        return None
+    if h in FA_SLOT_HOURS_UTC:
+        return "fa"
+    if h in EN_SLOT_HOURS_UTC:
+        return "en"
+    return None
+
+
+def _posted_today_count(posted_records):
+    """How many Shorts were already published today (UTC). Enforces MAX 5/day."""
+    today = _today()
+    n = 0
+    for r in posted_records:
+        stamped = r.get("posted_at") or ""
+        try:
+            # posted_at is an ISO datetime; compare its UTC date part.
+            day = datetime.fromisoformat(stamped).date().isoformat()
+        except ValueError:
+            day = stamped[:10]
+        if day == today:
+            n += 1
+    return n
+
 
 def _today():
     """Today's UTC date, used to keep recently-posted topics out of recycling."""
@@ -180,9 +216,17 @@ def main():
         return dict(best, lang=lang)
 
     total_posted = len(posted_records)
+    if _posted_today_count(posted_records) >= MAX_SHORTS_PER_DAY:
+        print(f"Daily cap reached ({MAX_SHORTS_PER_DAY}/day) - safe exit.")
+        return
     force_lang = (os.environ.get("FORCE_LANG") or "").strip().lower()
+    slot_lang = lang_for_utc_hour(datetime.now(timezone.utc).hour)
     if force_lang in ("fa", "en"):
         is_en_turn = (force_lang == "en")
+        print(f"FORCE_LANG override: {force_lang}")
+    elif slot_lang in ("fa", "en"):
+        is_en_turn = (slot_lang == "en")
+        print(f"Slot forcing: UTC hour -> {slot_lang}")
     else:
         is_en_turn = (total_posted % 2 == 1)
     if is_en_turn and not HAS_EN:

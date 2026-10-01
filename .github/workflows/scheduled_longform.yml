@@ -2,7 +2,7 @@ name: Padiz Daily Long-Form Video
 
 on:
   schedule:
-    # Primary slot: 12:00 UTC = 15:30 Tehran.
+    # Primary slot: 12:00 UTC = 15:30 Tehran (best for both monetization + discovery).
     # GitHub's cron is best-effort and has already misfired here - on
     # 2026-09-30 it ran 5h49m late and on 2026-10-01 it was skipped entirely.
     # So the workflow also fires catch-up slots; run_long_daily.py publishes at
