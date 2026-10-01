@@ -1,0 +1,3 @@
+Openverse/cc0/unknown
+https://api.openverse.org/v1/images/0974538d-85f2-40ae-af89-3dd4405e9aaa/thumb/?full_size=true
+person writing in notebook
