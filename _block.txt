@@ -1,0 +1,12 @@
+    head = (
+        'REAL-WORLD RESEARCH (found online today, use as raw material - do NOT copy these videos, do NOT mention other channels or their titles):\n'
+        if lang == "en" else
+        'تقهیق واقعی (امروز انترنت\u200c\u200cت در بهرساز بکار - برای بازنوزنده، نام کانال دیگران را نگویز نماینید):\n'
+    )
+    tail = (
+        "\nTurn the strongest of these angles into an ORIGINAL story for our own "
+        "audience. Add your own analysis, numbers and examples."
+        if lang == "en" else
+        '\nقویت\u200c\u200cترین انن، خودت را به کمال بنویسیدها، از اندیشها و نمونهاوز اصلی بفرقّ.'
+    )
+

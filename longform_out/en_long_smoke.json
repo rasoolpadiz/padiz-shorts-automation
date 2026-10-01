@@ -1,0 +1,18 @@
+{
+  "id": "en_long_smoke",
+  "video": "C:\\youtube_pipeline\\longform_out\\long_smoke.mp4",
+  "thumbnail": "C:\\youtube_pipeline\\longform_out\\thumb_en_long_smoke.jpg",
+  "duration": 10.233984,
+  "chapters": [
+    [
+      0.0,
+      "Scene One"
+    ],
+    [
+      6.158,
+      "Scene Two"
+    ]
+  ],
+  "lang": "en",
+  "images": 1
+}

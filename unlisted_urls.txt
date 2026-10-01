@@ -1,0 +1,3 @@
+en_long_money_01 FAILED <HttpError 400 when requesting None returned "The request metadata specifies an invalid video description.". Details: "[{'message': 'The request metadata specifies an invalid video description.', 'domain': 'youtube.video', 'reason': 'invalidDescription', 'location': 'body.snippet.description', 'locationType': 'other'}]">
+fa_long_money_01 https://www.youtube.com/shorts/I_8weqCLO28
+en_long_money_01 https://www.youtube.com/shorts/DTJFqLEKXzo

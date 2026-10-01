@@ -1,0 +1,9 @@
+{
+  "test": "C",
+  "name": "mp4->youtube_upload",
+  "pass": true,
+  "file": "C:\\youtube_pipeline\\aesthetic_short_under20s.mp4",
+  "privacy": "private",
+  "video_id": "VtFh07dfW7k",
+  "error": null
+}

@@ -239,38 +239,57 @@ def _add_natural_pauses(text: str) -> str:
 # in the audio). Delivery is steered with the speech style metadata instead.
 GEMINI_STYLE_FA = (
     "Native Iranian Persian (Farsi) narration for a long-form documentary video. "
-    "Sound like a thoughtful Iranian man explaining something he genuinely cares "
-    "about to one friend, not like a textbook or an advertisement. "
-    "Authentic Tehrani accent, warm and human intonation, conversational pace. "
-    "Vary the pitch naturally across sentences - let some sentences rise in "
-    "curiosity and others drop in weight. Pause briefly (under half a second) at "
-    "the end of a thought before moving on, and pause a touch longer before a "
-    "surprising fact. Never read in a flat or monotone rhythm, never speed up, "
-    "and never sound like an ad. Pronounce every Persian word correctly, with no "
-    "English or Arabic accent, and keep the numbers and names natural."
+    "You are an educated, thoughtful Iranian man in his 30s, passionate about this topic, "
+    "speaking warmly and naturally to a close friend over tea. Your voice should be: "
+    "\n"
+    "- Warm and genuine, never robotic or staged - like you're sharing real wisdom"
+    "- Conversational with natural cadence, actual Tehrani Persian accent"
+    "- Vary your delivery: let important facts drop your tone, curiosities lift your pitch"
+    "- Take real human pauses (0.3-0.5s) where you'd breathe between thoughts"
+    "- Emphasize key phrases with natural vocal color, not artificial stress"
+    "- Speed up slightly on lists to sound engaged, slow down on profound insights"
+    "- Use vocal filler occasionally ('خب', 'ببین') to sound human, not perfect"
+    "- Never sound like textbook Persian, advertisement, or AI voice synthesis"
+    "- Pronounce every Persian word with authentic Tehran dialect, no Arabic/English accent"
+    "- Let numbers and names flow naturally as if you say them daily"
 )
+
 GEMINI_STYLE_EN = (
-    "Natural, energetic and expressive American English narration for a viral Shorts video, "
-    "clear pronunciation, upbeat conversational tone"
+    "Natural, authentic American English narration for educational content. "
+    "You are a curious, intelligent person explaining something you genuinely care about "
+    "to someone you respect. Your voice should be: "
+    "\n"
+    "- Warm, human, conversational - never over-enthusiastic or sales-pitchy"
+    "- Authentic American accent with natural regional characteristics"
+    "- Vary your tone dramatically: whisper on intrigue, firm on authority, lift on discovery"
+    "- Take real human pauses (0.2-0.4s) where a real person would breathe"
+    "- Emphasize key insights with vocal color and intention, not artificial stress"
+    "- Speed up on lists and build-ups, slow down for profound moments"
+    "- Let your voice crack slightly with emotion on powerful ideas"
+    "- Use authentic filler words ('so', 'really', 'honestly') to sound human"
+    "- Never sound like a voiceover artist, podcast host, or AI synthesis"
+    "- Pronounce every word with clear American diction, no artificial accent"
+    "- Sound like you've lived the experiences you're describing"
 )
 
 # Dedicated TTS models first (most natural Persian delivery), then general models
 # that also accept the AUDIO response modality. The first model that answers wins;
 # unsupported ones raise and are skipped. Override with GEMINI_TTS_MODEL.
 #
-# Free-tier notes (ai.google.dev/gemini-api/docs/pricing): the *Flash* TTS models
-# are "Free of charge" on the free tier (their audio may be used to improve Google
-# products), while gemini-2.5-pro-preview-tts is "Not available" without billing -
-# hence it is tried last. Output audio is billed as 25 tokens per second when a
-# paid key is used.
+# For non-TTS (script generation), use the latest available models that support
+# content generation. Older models are deprecated, so we try newest first.
 GEMINI_TTS_MODELS = [
     os.environ.get("GEMINI_TTS_MODEL", "").strip(),
-    "gemini-3.8-flash-tts",             # newest free-tier TTS, best fidelity
-    "gemini-3.8-flash-lite-tts",        # free-tier TTS, cheapest
-    "gemini-2.5-flash-preview-tts",     # long-standing free-tier TTS
+    "gemini-3.8-flash-tts",             # newest free-tier TTS, best fidelity (can overload)
+    "gemini-2.5-flash-preview-tts",     # stable free-tier TTS
     "gemini-2.0-flash",                 # general model with AUDIO modality
-    "gemini-2.5-flash",                 # general model with AUDIO modality
-    "gemini-2.5-pro-preview-tts",       # paid tier only (best steering)
+]
+
+GEMINI_CONTENT_MODELS = [
+    os.environ.get("GEMINI_CONTENT_MODEL", "").strip(),
+    "gemini-3.8-flash",                 # newest high-speed model
+    "gemini-2.5-flash-preview",         # stable preview
+    "gemini-2.0-flash",                 # stable general model
 ]
 
 # Male voice for Farid-style slides, female voice for Dilara-style slides.

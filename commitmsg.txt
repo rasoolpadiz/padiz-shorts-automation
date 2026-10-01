@@ -1,0 +1,1 @@
+﻿content: two ready-to-render topics (EN+FA, 22 scenes each) so tomorrow publishes even if the writer API is down; zero-repeat selection enforced

@@ -1,0 +1,51 @@
+EN topic: 10 Money Traps Keeping You Broke (Fix These Now) #money
+FA topic: ۱۰ تلهٔ پول که تو را فقیر نگه می‌دارد (همین امروز درستش کن)
+
+EN queries:
+  01 empty classroom school desks
+  02 brain decision making puzzle
+  03 luxury car dealership window
+  04 piggy bank savings jar coins
+  05 credit card payment debt
+  06 broken car repair roadside
+  07 online shopping phone credit card
+  08 social media lifestyle phone apps
+  09 remote control couch living room
+  10 stock market chart investing screen
+  11 worried person finance stress
+  12 writing notebook goal planning desk
+  13 office worker desk suit tired
+  14 bank statement calculator money
+  15 mountain summit calm sunrise
+  16 automatic transfer banking phone app
+  17 wallet cash money bills
+  18 coins growing plant investment
+  19 money salary pay slip
+  20 hourglass sand time money
+  21 road horizon open highway future
+  22 taking action steps stairs upward
+FA queries:
+  01 empty classroom school desks
+  02 brain decision making psychology
+  03 luxury car showroom
+  04 piggy bank savings money
+  05 credit card payment debt
+  06 broken car repair
+  07 online shopping phone credit card
+  08 social media lifestyle phone
+  09 remote control couch living room
+  10 stock market chart investing
+  11 worried person finance stress
+  12 writing notebook goal planning
+  13 office worker desk tired
+  14 bank statement calculator
+  15 mountain summit sunrise calm
+  16 automatic banking transfer app
+  17 wallet cash money bills
+  18 coins growing plant investment
+  19 money salary pay slip
+  20 hourglass sand time money
+  21 open road horizon future
+  22 taking action stairs steps
+identical queries: 9 of 22
+shared: {'online shopping phone credit card', 'wallet cash money bills', 'empty classroom school desks', 'money salary pay slip', 'worried person finance stress', 'credit card payment debt', 'coins growing plant investment', 'hourglass sand time money', 'remote control couch living room'}

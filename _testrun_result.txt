@@ -1,0 +1,36 @@
+final status: completed
+conclusion: success
+===== 0_build-and-publish-long.txt
+2026-10-01T10:23:50.9690731Z [36;1mpython -c "import numpy, PIL, edge_tts, googleapiclient, arabic_reshaper, bidi; print('deps OK')"[0m
+2026-10-01T10:23:51.5306553Z deps OK
+2026-10-01T10:37:50.8904921Z [long] 2 generated topics available
+2026-10-01T10:37:50.8906110Z [long] en_long_ai_mistakes_01: 22 scenes, lang=en
+2026-10-01T10:37:50.8931668Z   [img] download failed (HTTP Error 424: Failed Dependency)
+2026-10-01T10:37:50.8938702Z   [img] commons failed (HTTP Error 429: Too Many Requests)
+2026-10-01T10:37:50.8939792Z   [img] commons failed (HTTP Error 429: Too Many Requests)
+2026-10-01T10:37:50.8948606Z   [img] download failed (HTTP Error 424: Failed Dependency)
+2026-10-01T10:37:50.8953955Z   [img] commons failed (HTTP Error 429: Too Many Requests)
+2026-10-01T10:37:50.8954568Z   [img] commons failed (HTTP Error 429: Too Many Requests)
+2026-10-01T10:37:50.8959215Z   [img] commons failed (HTTP Error 429: Too Many Requests)
+2026-10-01T10:37:50.8971133Z [long] done: /home/runner/work/padiz-shorts-automation/padiz-shorts-automation/longform_out/long_en_long_ai_mistakes_01.mp4 (11.45 min)
+===== build-and-publish-long/1_Set up job.txt
+===== build-and-publish-long/2_Checkout repository.txt
+===== build-and-publish-long/3_Set up Python 3.11.txt
+===== build-and-publish-long/5_Install Python dependencies.txt
+===== build-and-publish-long/6_Build + upload long video.txt
+2026-10-01T10:23:50.9690728Z [36;1mpython -c "import numpy, PIL, edge_tts, googleapiclient, arabic_reshaper, bidi; print('deps OK')"[0m
+2026-10-01T10:23:51.5306510Z deps OK
+2026-10-01T10:37:50.8904878Z [long] 2 generated topics available
+2026-10-01T10:37:50.8906104Z [long] en_long_ai_mistakes_01: 22 scenes, lang=en
+2026-10-01T10:37:50.8931664Z   [img] download failed (HTTP Error 424: Failed Dependency)
+2026-10-01T10:37:50.8938697Z   [img] commons failed (HTTP Error 429: Too Many Requests)
+2026-10-01T10:37:50.8939788Z   [img] commons failed (HTTP Error 429: Too Many Requests)
+2026-10-01T10:37:50.8948601Z   [img] download failed (HTTP Error 424: Failed Dependency)
+2026-10-01T10:37:50.8953951Z   [img] commons failed (HTTP Error 429: Too Many Requests)
+2026-10-01T10:37:50.8954565Z   [img] commons failed (HTTP Error 429: Too Many Requests)
+2026-10-01T10:37:50.8959212Z   [img] commons failed (HTTP Error 429: Too Many Requests)
+2026-10-01T10:37:50.8971128Z [long] done: /home/runner/work/padiz-shorts-automation/padiz-shorts-automation/longform_out/long_en_long_ai_mistakes_01.mp4 (11.45 min)
+===== build-and-publish-long/7_Commit state + generated topics + credits.txt
+===== build-and-publish-long/13_Post Set up Python 3.11.txt
+===== build-and-publish-long/14_Post Checkout repository.txt
+===== build-and-publish-long/15_Complete job.txt

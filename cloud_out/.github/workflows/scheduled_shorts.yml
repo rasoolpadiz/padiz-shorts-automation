@@ -1,0 +1,52 @@
+name: Padiz 24/7 Shorts Automation
+
+on:
+  schedule:
+    # Runs 5 times a day (UTC times -> Tehran times UTC+3:30):
+    # 06:00 UTC = 09:30 Tehran
+    # 10:00 UTC = 13:30 Tehran
+    # 14:00 UTC = 17:30 Tehran
+    # 17:00 UTC = 20:30 Tehran
+    # 20:00 UTC = 23:30 Tehran
+    - cron: '0 6,10,14,17,20 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install system dependencies (FFmpeg)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run automated Shorts pipeline
+        env:
+          YOUTUBE_TOKEN_B64: ${{ secrets.YOUTUBE_TOKEN_B64 }}
+        run: |
+          python run_daily.py
+
+      - name: Commit and push updated state
+        run: |
+          git config --global user.name "Padiz Automation Bot"
+          git config --global user.email "bot@padiz.local"
+          git add posted_shorts.json processed_reels.json || true
+          git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update posted shorts state [skip ci]" && git push)

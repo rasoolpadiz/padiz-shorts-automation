@@ -1,0 +1,32 @@
+[debug] Command-line config: ['-v', '--no-warnings', '--no-part', '--newline', '--format', 'best[ext=mp4][height<=1920]/bestvideo[height<=1920]+bestaudio/best', '--merge-output-format', 'mp4', '--output', 'C:\\youtube_pipeline\\test_b_jNQXAC9IVRw.mp4', '--no-playlist', '--retries', '2', '--socket-timeout', '30', '--extractor-args', 'youtube:player_client=tv', 'https://www.youtube.com/watch?v=jNQXAC9IVRw']
+[debug] Encodings: locale cp1252, fs utf-8, pref cp1252, out cp1252 (No ANSI), error cp1252 (No ANSI), screen cp1252 (No ANSI)
+[debug] yt-dlp version stable@2026.08.19 from yt-dlp/yt-dlp [594bd50c2] (pip)
+[debug] Python 3.12.10 (CPython AMD64 64bit) - Windows-11-10.0.28000-SP0 (OpenSSL 3.0.16 11 Feb 2025)
+[debug] exe versions: ffmpeg 9.0.2-full_build-www.gyan.dev (setts), ffprobe 9.0.2-full_build-www.gyan.dev
+[debug] Optional libraries: certifi-2026.07.22, requests-2.34.2, sqlite3-3.49.1, urllib3-2.8.0, websockets-16.1.1
+[debug] JS runtimes: none
+[debug] Proxy map: {'http': 'http://127.0.0.1:10808', 'https': 'http://127.0.0.1:10808', 'ftp': 'http://127.0.0.1:10808'}
+[debug] Request Handlers: urllib, requests, websockets
+[debug] Plugin directories: none
+[debug] Loaded 1744 extractors
+[debug] [youtube] [pot] PO Token Providers: none
+[debug] [youtube] [pot] PO Token Cache Providers: memory
+[debug] [youtube] [pot] PO Token Cache Spec Providers: webpo
+[debug] [youtube] [jsc] JS Challenge Providers: bun (unavailable), deno (unavailable), node (unavailable), quickjs (unavailable)
+[youtube] Extracting URL: https://www.youtube.com/watch?v=jNQXAC9IVRw
+[youtube] jNQXAC9IVRw: Downloading webpage
+[youtube] jNQXAC9IVRw: Downloading tv client config
+[debug] [youtube] Forcing "main" player JS variant for player 7460dd14
+        original url = /s/player/7460dd14/player_es6.vflset/en_US/base.js
+[youtube] jNQXAC9IVRw: Downloading player 7460dd14-main
+[youtube] jNQXAC9IVRw: Downloading tv player API JSON
+[debug] [youtube] jNQXAC9IVRw: tv player response playability status: UNPLAYABLE
+ERROR: [youtube] jNQXAC9IVRw: The page needs to be reloaded.
+  File "C:\Users\Allah\AppData\Local\Programs\Python\Python312\Lib\site-packages\yt_dlp\extractor\common.py", line 765, in extract
+    ie_result = self._real_extract(url)
+                ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Allah\AppData\Local\Programs\Python\Python312\Lib\site-packages\yt_dlp\extractor\youtube\_video.py", line 4076, in _real_extract
+    self.raise_no_formats(reason, expected=True)
+  File "C:\Users\Allah\AppData\Local\Programs\Python\Python312\Lib\site-packages\yt_dlp\extractor\common.py", line 1272, in raise_no_formats
+    raise ExtractorError(msg, expected=expected, video_id=video_id)
+

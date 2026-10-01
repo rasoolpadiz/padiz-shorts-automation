@@ -1,0 +1,56 @@
+[long] en_long_money_01: 22 scenes, lang=en
+[Gemini TTS] gemini-3.8-flash-tts (voice=Puck) -> C:\youtube_pipeline\temp_render\_batch_narration.mp3
+[voice] one-shot Gemini narration split into 6 clips (voice=Puck)
+[Gemini TTS] gemini-3.8-flash-tts (voice=Puck) -> C:\youtube_pipeline\temp_render\_batch_narration.mp3
+[voice] one-shot Gemini narration split into 6 clips (voice=Puck)
+[Gemini TTS] gemini-3.8-flash-tts (voice=Puck) -> C:\youtube_pipeline\temp_render\_batch_narration.mp3
+[voice] one-shot Gemini narration split into 6 clips (voice=Puck)
+[Gemini TTS] gemini-3.8-flash-tts (voice=Puck) -> C:\youtube_pipeline\temp_render\_batch_narration.mp3
+[voice] one-shot Gemini narration split into 4 clips (voice=Puck)
+  [img] 22/22 photos ready
+  scene 1/22 ok (23.4s)
+  scene 2/22 ok (21.5s)
+  scene 3/22 ok (21.3s)
+  scene 4/22 ok (19.9s)
+  scene 5/22 ok (24.9s)
+  scene 6/22 ok (24.3s)
+  scene 7/22 ok (23.3s)
+  scene 8/22 ok (25.3s)
+  scene 9/22 ok (27.2s)
+  scene 10/22 ok (24.7s)
+  scene 11/22 ok (27.5s)
+  scene 12/22 ok (24.2s)
+  scene 13/22 ok (25.3s)
+  scene 14/22 ok (24.3s)
+  scene 15/22 ok (24.8s)
+  scene 16/22 ok (21.8s)
+  scene 17/22 ok (20.3s)
+  scene 18/22 ok (22.9s)
+  scene 19/22 ok (23.2s)
+  scene 20/22 ok (21.3s)
+  scene 21/22 ok (21.0s)
+  scene 22/22 ok (21.0s)
+[long] done: C:\youtube_pipeline\longform_out\long_en_money_01.mp4 (8.23 min)
+BUILD OK dur 493.8 min 8.23
+long_voice_01.mp3 22.5
+long_voice_02.mp3 20.6
+long_voice_03.mp3 20.4
+long_voice_04.mp3 19.0
+long_voice_05.mp3 24.0
+long_voice_06.mp3 23.4
+long_voice_07.mp3 22.4
+long_voice_08.mp3 24.4
+long_voice_09.mp3 26.3
+long_voice_10.mp3 23.8
+long_voice_11.mp3 26.6
+long_voice_12.mp3 23.3
+long_voice_13.mp3 24.4
+long_voice_14.mp3 23.4
+long_voice_15.mp3 23.9
+long_voice_16.mp3 20.9
+long_voice_17.mp3 19.4
+long_voice_18.mp3 22.0
+long_voice_19.mp3 22.3
+long_voice_20.mp3 20.4
+long_voice_21.mp3 20.1
+long_voice_22.mp3 20.1

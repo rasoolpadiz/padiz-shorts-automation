@@ -1,0 +1,107 @@
+{
+  "test": "B",
+  "name": "video_id->mp4",
+  "pass": true,
+  "url": "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+  "provider_direct": {
+    "url": "http://127.0.0.1:4416",
+    "reachable": false,
+    "token_minted": false,
+    "version": null,
+    "error": "URLError: <urlopen error [WinError 10061] No connection could be made because the target machine actively refused it>",
+    "response_keys": [],
+    "token_length": 0
+  },
+  "attempts": [
+    {
+      "label": "mweb",
+      "clients": [
+        "mweb"
+      ],
+      "ok": false,
+      "returncode": 1,
+      "elapsed_sec": 3.4,
+      "failure_kind": "GVS_403",
+      "error_tail": "a\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\yt_dlp\\YoutubeDL.py\", line 2964, in process_video_result | self.raise_no_formats(info_dict) | File \"C:\\Users\\Allah\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\yt_dlp\\YoutubeDL.py\", line 1196, in raise_no_formats | raise ExtractorError(msg, video_id=info['id'], ie=info['extractor'], | yt_dlp.utils.ExtractorError: [youtube] jNQXAC9IVRw: No video formats found!; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U",
+      "pot_evidence": [
+        "[debug] [youtube] [pot] PO Token Providers: none",
+        "[debug] [youtube] [pot] PO Token Cache Providers: memory",
+        "[debug] [youtube] [pot] PO Token Cache Spec Providers: webpo",
+        "[debug] [youtube] jNQXAC9IVRw: Detected experiment to bind GVS PO Token to video ID for mweb client",
+        "[debug] WARNING: [youtube] jNQXAC9IVRw: mweb client https formats require a GVS PO Token which was not provided. They will be skipped as they may yield HTTP Error 403. You can manually pass a GVS PO Token for this client with --extractor-args \"youtube:po_token=mweb.gvs+XXX\". For more information, refer to  https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide",
+        "[debug] [youtube] jNQXAC9IVRw: Some mweb client subtitles require a PO Token which was not provided. They will be discarded since they are not downloadable as-is. You can manually pass a Subtitles PO Token for this client with --extractor-args \"youtube:po_token=mweb.subs+XXX\" . For more information, refer to  https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide",
+        "[debug] [youtube] jNQXAC9IVRw: There are missing subtitles languages because a PO token was not provided. Subtitles for these languages are missing: en, de."
+      ],
+      "download_evidence": [],
+      "log_file": "attempt_mweb.log"
+    },
+    {
+      "label": "web",
+      "clients": [
+        "web"
+      ],
+      "ok": false,
+      "returncode": 1,
+      "elapsed_sec": 2.0,
+      "failure_kind": "TIMEOUT",
+      "error_tail": "a\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\yt_dlp\\YoutubeDL.py\", line 2964, in process_video_result | self.raise_no_formats(info_dict) | File \"C:\\Users\\Allah\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\yt_dlp\\YoutubeDL.py\", line 1196, in raise_no_formats | raise ExtractorError(msg, video_id=info['id'], ie=info['extractor'], | yt_dlp.utils.ExtractorError: [youtube] jNQXAC9IVRw: No video formats found!; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U",
+      "pot_evidence": [
+        "[debug] [youtube] [pot] PO Token Providers: none",
+        "[debug] [youtube] [pot] PO Token Cache Providers: memory",
+        "[debug] [youtube] [pot] PO Token Cache Spec Providers: webpo",
+        "[debug] [youtube] jNQXAC9IVRw: Detected experiment to bind GVS PO Token to video ID for web client",
+        "[debug] [youtube] jNQXAC9IVRw: Some web client subtitles require a PO Token which was not provided. They will be discarded since they are not downloadable as-is. You can manually pass a Subtitles PO Token for this client with --extractor-args \"youtube:po_token=web.subs+XXX\" . For more information, refer to  https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide",
+        "[debug] [youtube] jNQXAC9IVRw: There are missing subtitles languages because a PO token was not provided. Subtitles for these languages are missing: de, en."
+      ],
+      "download_evidence": [],
+      "log_file": "attempt_web.log"
+    },
+    {
+      "label": "tv",
+      "clients": [
+        "tv"
+      ],
+      "ok": false,
+      "returncode": 1,
+      "elapsed_sec": 2.9,
+      "failure_kind": "TIMEOUT",
+      "error_tail": "aded. | File \"C:\\Users\\Allah\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\yt_dlp\\extractor\\common.py\", line 765, in extract | ie_result = self._real_extract(url) | ^^^^^^^^^^^^^^^^^^^^^^^ | File \"C:\\Users\\Allah\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\yt_dlp\\extractor\\youtube\\_video.py\", line 4076, in _real_extract | self.raise_no_formats(reason, expected=True) | File \"C:\\Users\\Allah\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\yt_dlp\\extractor\\common.py\", line 1272, in raise_no_formats | raise ExtractorError(msg, expected=expected, video_id=video_id)",
+      "pot_evidence": [
+        "[debug] [youtube] [pot] PO Token Providers: none",
+        "[debug] [youtube] [pot] PO Token Cache Providers: memory",
+        "[debug] [youtube] [pot] PO Token Cache Spec Providers: webpo"
+      ],
+      "download_evidence": [],
+      "log_file": "attempt_tv.log"
+    },
+    {
+      "label": "default",
+      "clients": null,
+      "ok": true,
+      "returncode": 0,
+      "elapsed_sec": 4.2,
+      "failure_kind": null,
+      "error_tail": null,
+      "pot_evidence": [
+        "[debug] [youtube] [pot] PO Token Providers: none",
+        "[debug] [youtube] [pot] PO Token Cache Providers: memory",
+        "[debug] [youtube] [pot] PO Token Cache Spec Providers: webpo"
+      ],
+      "download_evidence": [
+        "[download]  12.6% of  246.27KiB at    1.88MiB/s ETA 00:00",
+        "[download]  25.6% of  246.27KiB at    2.53MiB/s ETA 00:00",
+        "[download]  51.6% of  246.27KiB at    2.95MiB/s ETA 00:00",
+        "[download] 100.0% of  246.27KiB at    2.56MiB/s ETA 00:00",
+        "[download] 100% of  246.27KiB in 00:00:00 at 758.97KiB/s"
+      ],
+      "log_file": "attempt_default.log"
+    }
+  ],
+  "file": {
+    "path": "C:\\youtube_pipeline\\test_b_jNQXAC9IVRw.mp4",
+    "size_bytes": 475989,
+    "sha256": "488c5108c18e9ac4993e58eb3e561149f4fe05cf4abf7bf2c91afa9e162153cd",
+    "client_used": "default",
+    "elapsed_sec": 4.2
+  }
+}

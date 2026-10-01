@@ -1,0 +1,7 @@
+1
+00:00:00,000 --> 00:00:02,408
+And this is the second scene, checking
+
+2
+00:00:02,408 --> 00:00:04,942
+captions, transitions and whoosh sounds.

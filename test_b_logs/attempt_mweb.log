@@ -1,0 +1,43 @@
+[debug] Command-line config: ['-v', '--no-warnings', '--no-part', '--newline', '--format', 'best[ext=mp4][height<=1920]/bestvideo[height<=1920]+bestaudio/best', '--merge-output-format', 'mp4', '--output', 'C:\\youtube_pipeline\\test_b_jNQXAC9IVRw.mp4', '--no-playlist', '--retries', '2', '--socket-timeout', '30', '--extractor-args', 'youtube:player_client=mweb', 'https://www.youtube.com/watch?v=jNQXAC9IVRw']
+[debug] Encodings: locale cp1252, fs utf-8, pref cp1252, out cp1252 (No ANSI), error cp1252 (No ANSI), screen cp1252 (No ANSI)
+[debug] yt-dlp version stable@2026.08.19 from yt-dlp/yt-dlp [594bd50c2] (pip)
+[debug] Python 3.12.10 (CPython AMD64 64bit) - Windows-11-10.0.28000-SP0 (OpenSSL 3.0.16 11 Feb 2025)
+[debug] exe versions: ffmpeg 9.0.2-full_build-www.gyan.dev (setts), ffprobe 9.0.2-full_build-www.gyan.dev
+[debug] Optional libraries: certifi-2026.07.22, requests-2.34.2, sqlite3-3.49.1, urllib3-2.8.0, websockets-16.1.1
+[debug] JS runtimes: none
+[debug] Proxy map: {'http': 'http://127.0.0.1:10808', 'https': 'http://127.0.0.1:10808', 'ftp': 'http://127.0.0.1:10808'}
+[debug] Request Handlers: urllib, requests, websockets
+[debug] Plugin directories: none
+[debug] Loaded 1744 extractors
+[debug] [youtube] [pot] PO Token Providers: none
+[debug] [youtube] [pot] PO Token Cache Providers: memory
+[debug] [youtube] [pot] PO Token Cache Spec Providers: webpo
+[debug] [youtube] [jsc] JS Challenge Providers: bun (unavailable), deno (unavailable), node (unavailable), quickjs (unavailable)
+[youtube] Extracting URL: https://www.youtube.com/watch?v=jNQXAC9IVRw
+[youtube] jNQXAC9IVRw: Downloading webpage
+[youtube] jNQXAC9IVRw: Downloading mweb client config
+[debug] [youtube] Forcing "main" player JS variant for player fb50cd46
+        original url = /s/player/fb50cd46/player_es6.vflset/en_US/base.js
+[debug] [youtube] jNQXAC9IVRw: Detected experiment to bind GVS PO Token to video ID for mweb client
+[youtube] jNQXAC9IVRw: Downloading mweb player API JSON
+[debug] WARNING: [youtube] jNQXAC9IVRw: n challenge solving failed: Some formats may be missing. Ensure you have a supported JavaScript runtime and challenge solver script distribution installed. Review any warnings presented before this message. For more details, refer to  https://github.com/yt-dlp/yt-dlp/wiki/EJS
+[debug] WARNING: [youtube] jNQXAC9IVRw: mweb client https formats require a GVS PO Token which was not provided. They will be skipped as they may yield HTTP Error 403. You can manually pass a GVS PO Token for this client with --extractor-args "youtube:po_token=mweb.gvs+XXX". For more information, refer to  https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide
+[debug] [youtube] jNQXAC9IVRw: Some mweb client subtitles require a PO Token which was not provided. They will be discarded since they are not downloadable as-is. You can manually pass a Subtitles PO Token for this client with --extractor-args "youtube:po_token=mweb.subs+XXX" . For more information, refer to  https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide
+[debug] [youtube] jNQXAC9IVRw: There are missing subtitles languages because a PO token was not provided. Subtitles for these languages are missing: en, de.
+ERROR: [youtube] jNQXAC9IVRw: No video formats found!; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+Traceback (most recent call last):
+  File "C:\Users\Allah\AppData\Local\Programs\Python\Python312\Lib\site-packages\yt_dlp\YoutubeDL.py", line 1731, in wrapper
+    return func(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Allah\AppData\Local\Programs\Python\Python312\Lib\site-packages\yt_dlp\YoutubeDL.py", line 1887, in __extract_info
+    return self.process_ie_result(ie_result, download, extra_info)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Allah\AppData\Local\Programs\Python\Python312\Lib\site-packages\yt_dlp\YoutubeDL.py", line 1946, in process_ie_result
+    ie_result = self.process_video_result(ie_result, download=download)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Allah\AppData\Local\Programs\Python\Python312\Lib\site-packages\yt_dlp\YoutubeDL.py", line 2964, in process_video_result
+    self.raise_no_formats(info_dict)
+  File "C:\Users\Allah\AppData\Local\Programs\Python\Python312\Lib\site-packages\yt_dlp\YoutubeDL.py", line 1196, in raise_no_formats
+    raise ExtractorError(msg, video_id=info['id'], ie=info['extractor'],
+yt_dlp.utils.ExtractorError: [youtube] jNQXAC9IVRw: No video formats found!; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+

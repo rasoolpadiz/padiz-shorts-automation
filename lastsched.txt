@@ -1,0 +1,32 @@
+repo: rasoolpadiz/padiz-shorts-automation
+when (UTC)           event             conclusion   run id
+------------------------------------------------------------------------
+2026-09-28 21:31:22  workflow_dispatch success      36486650373
+2026-09-28 21:23:40  workflow_dispatch success      36485789136
+2026-09-28 21:18:03  workflow_dispatch success      36485167787
+2026-09-28 21:12:45  workflow_dispatch success      36484557458
+2026-09-28 21:09:59  workflow_dispatch success      36484244799
+2026-09-28 20:21:24  schedule          success      36478599249
+2026-09-28 12:45:52  schedule          success      36423930526
+2026-09-27 22:45:54  schedule          success      36356409547
+2026-09-27 18:01:45  schedule          success      36339109574
+2026-09-27 11:17:12  schedule          success      36315240847
+2026-09-26 22:19:36  schedule          success      36275902907
+2026-09-26 17:35:30  schedule          success      36259567887
+2026-09-26 10:43:43  schedule          success      36236657408
+2026-09-25 23:01:46  schedule          success      36199343930
+2026-09-25 18:12:17  schedule          success      36171921907
+
+========================================================================
+RUN 36478599249  2026-09-28T20:21:24  schedule  success
+https://github.com/rasoolpadiz/padiz-shorts-automation/actions/runs/36478599249
+========================================================================
+--- 0_build-and-publish.txt ---
+    2026-09-28T20:22:05.0936779Z ERROR: [youtube] BCdij4U3vqc: Sign in to confirm you’re not a bot. Use --cookies-from-browser or --cookies for the authentication. See  https://github.com/yt-dlp/yt-dlp/wi
+    2026-09-28T20:22:40.3808600Z Scheduled turn for Global Viral Hunter! Scanning viral trends...
+    2026-09-28T20:22:40.3811635Z Starting Global Viral Hunter...
+    2026-09-28T20:22:40.3814414Z Found viral video [psychology_facts]: https://www.youtube.com/watch?v=BCdij4U3vqc with 153,424 views!
+    2026-09-28T20:22:40.3816233Z Downloading video stream...
+    2026-09-28T20:22:40.3823296Z Viral hunter encountered an issue: ERROR: [youtube] BCdij4U3vqc: Sign in to confirm you’re not a bot. Use --cookies-from-browser or --cookies for the authentication. See  
+    2026-09-28T20:22:40.3830154Z Selected topic: ۳ حقیقت تاریخی که کمتر شنیدی! 📜 #shorts (ID: history_facts_01)
+    2026-09-28T20:22:40.3839078Z SUCCESSFULLY PUBLISHED TO YOUTUBE SHORTS!

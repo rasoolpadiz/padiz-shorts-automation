@@ -1,0 +1,28 @@
+run 36861050108
+status: completed
+conclusion: success
+##[group]Run python analytics.py || echo "::warning::analytics collection failed - pickers will use the default order"
+[36;1mpython analytics.py || echo "::warning::analytics collection failed - pickers will use the default order"[0m
+[analytics] 32 videos | 18199 views | shorts 18105 | long 94 | subs 40
+[36;1m    || echo "::warning::discovery failed for $LANG - writers use the plain niche"[0m
+[discover] YouTube search budget spent today - skipping this niche
+[discover] fa 'پول و اقتصاد روزمره': 1 candidates
+[discover] YouTube search budget spent today - skipping this niche
+[discover] fa 'روانشناسی و رفتار انسان': 0 candidates
+[discover] TOP 1 for 'fa':
+  heat=  0.73 vel=    0.00 [news      ] پول و اقتصاد روزمره  سریال نقطه چین 111 - بورس بازان منچولباف -
+[discover] YouTube search budget spent today - skipping this niche
+[discover] en 'History': 6 candidates
+[discover] YouTube search budget spent today - skipping this niche
+[discover] en 'Military History': 6 candidates
+[discover] TOP 10 for 'en':
+  heat=  0.73 vel=    0.00 [news      ] History              Arab-Israeli wars | History, Conflict, Cau
+  heat=  0.73 vel=    0.00 [news      ] History              St. Patrick’s Day: Facts, Details &amp; Da
+  heat=  0.73 vel=    0.00 [news      ] History              Sven Beckert, historian: ‘Capitalism is no
+  heat=  0.73 vel=    0.00 [news      ] History              Hwang Hyun-pil defends 'The Assassin(s)' a
+  heat=  0.73 vel=    0.00 [news      ] History              Holodomor | Facts, Definition, &amp; Death
+  heat=  0.73 vel=    0.00 [news      ] History              Cinco de Mayo: 5 Facts About the Mexican H
+  heat=  0.73 vel=    0.00 [news      ] Military History     2026 Iran war | Oil, Explained, United Sta
+  heat=  0.73 vel=    0.00 [news      ] Military History     What Are the DEFCON Levels? - Military.com
+  heat=  0.73 vel=    0.00 [news      ] Military History     Memorial Day facts, meaning, and history -
+  heat=  0.73 vel=    0.00 [news      ] Military History     What Is a Trade War? History, Tariffs, &am

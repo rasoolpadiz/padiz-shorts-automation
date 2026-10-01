@@ -1,0 +1,2 @@
+file 'C:/youtube_pipeline/longform_out/en_long_smoke/clip_01.mp4'
+file 'C:/youtube_pipeline/longform_out/en_long_smoke/clip_02.mp4'

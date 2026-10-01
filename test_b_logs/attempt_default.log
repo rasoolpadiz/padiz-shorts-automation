@@ -1,0 +1,52 @@
+[debug] Command-line config: ['-v', '--no-warnings', '--no-part', '--newline', '--format', 'best[ext=mp4][height<=1920]/bestvideo[height<=1920]+bestaudio/best', '--merge-output-format', 'mp4', '--output', 'C:\\youtube_pipeline\\test_b_jNQXAC9IVRw.mp4', '--no-playlist', '--retries', '2', '--socket-timeout', '30', 'https://www.youtube.com/watch?v=jNQXAC9IVRw']
+[debug] Encodings: locale cp1252, fs utf-8, pref cp1252, out cp1252 (No ANSI), error cp1252 (No ANSI), screen cp1252 (No ANSI)
+[debug] yt-dlp version stable@2026.08.19 from yt-dlp/yt-dlp [594bd50c2] (pip)
+[debug] Python 3.12.10 (CPython AMD64 64bit) - Windows-11-10.0.28000-SP0 (OpenSSL 3.0.16 11 Feb 2025)
+[debug] exe versions: ffmpeg 9.0.2-full_build-www.gyan.dev (setts), ffprobe 9.0.2-full_build-www.gyan.dev
+[debug] Optional libraries: certifi-2026.07.22, requests-2.34.2, sqlite3-3.49.1, urllib3-2.8.0, websockets-16.1.1
+[debug] JS runtimes: none
+[debug] Proxy map: {'http': 'http://127.0.0.1:10808', 'https': 'http://127.0.0.1:10808', 'ftp': 'http://127.0.0.1:10808'}
+[debug] Request Handlers: urllib, requests, websockets
+[debug] Plugin directories: none
+[debug] Loaded 1744 extractors
+[debug] [youtube] [pot] PO Token Providers: none
+[debug] [youtube] [pot] PO Token Cache Providers: memory
+[debug] [youtube] [pot] PO Token Cache Spec Providers: webpo
+[debug] [youtube] [jsc] JS Challenge Providers: bun (unavailable), deno (unavailable), node (unavailable), quickjs (unavailable)
+[youtube] Extracting URL: https://www.youtube.com/watch?v=jNQXAC9IVRw
+[youtube] jNQXAC9IVRw: Downloading webpage
+[debug] WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[debug] [youtube] Forcing "main" player JS variant for player 7460dd14
+        original url = /s/player/7460dd14/player_es6.vflset/en_US/base.js
+[youtube] jNQXAC9IVRw: Downloading visionos player API JSON
+[youtube] jNQXAC9IVRw: Downloading m3u8 information
+[debug] Sort order given by extractor: quality, res, fps, hdr:12, source, vcodec, channels, acodec, lang, proto
+[debug] Formats sorted by: hasvid, ie_pref, quality, res, fps, hdr:12(7), source, vcodec, channels, acodec, lang, proto, size, br, asr, vext, aext, hasaud, id
+[info] jNQXAC9IVRw: Downloading 1 format(s): 395+251
+[debug] Invoking http downloader on "https://rr1---sn-bpcpgoxu-pnue.googlevideo.com/videoplayback?expire=1790653915&ei=e-G6auf6GP_A6LUPoqmw-Q0&ip=213.156.152.137&id=o-ALD4mmVsagU5hOP6fSbtRpW9huZ321Zzou93-nxy_-2P&itag=395&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=972&met=1790632315%2C&mh=VD&mm=18%2C29&mn=sn-bpcpgoxu-pnue%2Csn-ajnv4c-5a&ms=aub%2Crdu&mv=m&mvi=1&pcm2cms=yes&pl=24&rms=aub%2Caub&initcwndbps=1335000&bui=AWzQHwpd53UFt_nZCtKVrcUt-GqANx67eNFk57j8sm164Rg08-Rynmmdku358pnWkx5BV5ra-tDynIv0&spc=I-rgIdb1ZfWAFvaW-iMmBbykf0xX19PG4PSZbyZcM3pC_SkiK5NAHvm-okuS&vprv=1&svpuc=1&mime=video%2Fmp4&rqh=1&gir=yes&clen=223779&dur=18.933&lmt=1767107300523129&mt=1790632142&fvip=4&keepalive=yes&fexp=51565116%2C52112905%2C52178456&c=VISIONOS&txp=4530534&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AE0s2JYwRQIhAMcRvRLj2NstaqECo592eFgQ1hoaGTobx-HF4J7UJRhWAiA__FMzmO6PhfgY4oGO3FChqwSWZI20DaJ9JCpw0Toscg%3D%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpcm2cms%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRQIgDRIiFy5l6hG81qr7073vNu7AuCY_t7e4Wbt3Vq34HX0CIQCBBGDOY7rs7ULb3snz86O6e6jwucox7o0_q-PYDPbTiQ%3D%3D"
+[debug] File locking is not supported. Proceeding without locking
+[download] Destination: C:\youtube_pipeline\test_b_jNQXAC9IVRw.f395.mp4
+[download]   0.5% of  218.53KiB at   26.96KiB/s ETA 00:08
+[download]   1.4% of  218.53KiB at   79.76KiB/s ETA 00:02
+[download]   3.2% of  218.53KiB at  183.58KiB/s ETA 00:01
+[download]   6.9% of  218.53KiB at  387.16KiB/s ETA 00:00
+[download]  14.2% of  218.53KiB at  265.05KiB/s ETA 00:00
+[download]  28.8% of  218.53KiB at  374.87KiB/s ETA 00:00
+[download]  58.1% of  218.53KiB at  469.50KiB/s ETA 00:00
+[download] 100.0% of  218.53KiB at  609.40KiB/s ETA 00:00
+[download] 100% of  218.53KiB in 00:00:00 at 261.86KiB/s
+[debug] Invoking http downloader on "https://rr1---sn-bpcpgoxu-pnue.googlevideo.com/videoplayback?expire=1790653915&ei=e-G6auf6GP_A6LUPoqmw-Q0&ip=213.156.152.137&id=o-ALD4mmVsagU5hOP6fSbtRpW9huZ321Zzou93-nxy_-2P&itag=251&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=972&met=1790632315%2C&mh=VD&mm=18%2C29&mn=sn-bpcpgoxu-pnue%2Csn-ajnv4c-5a&ms=aub%2Crdu&mv=m&mvi=1&pcm2cms=yes&pl=24&rms=aub%2Caub&initcwndbps=1335000&bui=AWzQHwpd53UFt_nZCtKVrcUt-GqANx67eNFk57j8sm164Rg08-Rynmmdku358pnWkx5BV5ra-tDynIv0&spc=I-rgIdb1ZfWAFvaW-iMmBbykf0xX19PG4PSZbyZcM3pC_SkiK5NAHvm-okuS&vprv=1&svpuc=1&mime=audio%2Fwebm&rqh=1&gir=yes&clen=252182&dur=19.021&lmt=1680501254853292&mt=1790632142&fvip=4&keepalive=yes&fexp=51565116%2C52112905%2C52178456&c=VISIONOS&txp=4530434&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AE0s2JYwRQIhAJtGNeQKUb2V58MgyRPXXztRfxQ_IhT3isUMt80Qg9ZiAiBTiBjvSOBjA-gpdDo9xk6CKhFUnigb2G4rS72Mj9tRfw%3D%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpcm2cms%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRQIgDRIiFy5l6hG81qr7073vNu7AuCY_t7e4Wbt3Vq34HX0CIQCBBGDOY7rs7ULb3snz86O6e6jwucox7o0_q-PYDPbTiQ%3D%3D"
+[download] Destination: C:\youtube_pipeline\test_b_jNQXAC9IVRw.f251.webm
+[download]   0.4% of  246.27KiB at  118.35KiB/s ETA 00:02
+[download]   1.2% of  246.27KiB at  355.04KiB/s ETA 00:00
+[download]   2.8% of  246.27KiB at  828.42KiB/s ETA 00:00
+[download]   6.1% of  246.27KiB at    1.55MiB/s ETA 00:00
+[download]  12.6% of  246.27KiB at    1.88MiB/s ETA 00:00
+[download]  25.6% of  246.27KiB at    2.53MiB/s ETA 00:00
+[download]  51.6% of  246.27KiB at    2.95MiB/s ETA 00:00
+[download] 100.0% of  246.27KiB at    2.56MiB/s ETA 00:00
+[download] 100% of  246.27KiB in 00:00:00 at 758.97KiB/s
+[Merger] Merging formats into "C:\youtube_pipeline\test_b_jNQXAC9IVRw.mp4"
+[debug] ffmpeg command line: ffmpeg -y -loglevel repeat+info -i file:C:\youtube_pipeline\test_b_jNQXAC9IVRw.f395.mp4 -i file:C:\youtube_pipeline\test_b_jNQXAC9IVRw.f251.webm -c copy -map 0:v:0 -map 1:a:0 -movflags +faststart file:C:\youtube_pipeline\test_b_jNQXAC9IVRw.temp.mp4
+Deleting original file C:\youtube_pipeline\test_b_jNQXAC9IVRw.f251.webm (pass -k to keep)
+Deleting original file C:\youtube_pipeline\test_b_jNQXAC9IVRw.f395.mp4 (pass -k to keep)

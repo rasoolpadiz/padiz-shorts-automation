@@ -1,0 +1,55 @@
+name: Persian Render Check
+
+# Renders sample slides with the production code path and uploads them as an
+# artifact, so the Persian text shaping can be verified on the runner image
+# (ubuntu-latest + Pillow wheel ships libraqm) without touching YouTube quota.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  render-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install rendering dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Render sample slides
+        run: |
+          mkdir -p render_check
+          python render_check.py 2>&1 | tee render_check/cloud_log.txt
+
+      - name: Upload rendered slides
+        uses: actions/upload-artifact@v4
+        with:
+          name: persian-render-check
+          path: render_check/*.png
+          if-no-files-found: error
+          retention-days: 7
+
+      # The rendered PNGs are also committed to a dedicated branch so they can be
+      # inspected from any machine with plain git access (no API token needed).
+      - name: Publish rendered slides to branch
+        if: always()
+        run: |
+          git config --global user.name "Padiz Render Bot"
+          git config --global user.email "bot@padiz.local"
+          git checkout -B cloud-render-check
+          git add -f render_check/slide_1.png render_check/slide_2.png render_check/slide_3.png
+          git add -f render_check/mixed_samples.png render_check/cloud_log.txt
+          git commit -m "chore: cloud render check output [skip ci]" || echo "nothing to commit"
+          git push --force origin cloud-render-check

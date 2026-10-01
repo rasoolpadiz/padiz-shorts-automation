@@ -1,0 +1,6 @@
+uploading en_long_money_01 ...
+FAILED en_long_money_01 <HttpError 400 when requesting None returned "The request metadata specifies an invalid video description.". Details: "[{'message': 'The request metadata specifies an invalid video description.', 'domain': 'youtube.video', 'reason': 'invalidDescription', 'location': 'body.snippet.description', 'locationType': 'other'}]">
+uploading fa_long_money_01 ...
+[long] custom thumbnail set
+OK fa_long_money_01 https://www.youtube.com/shorts/I_8weqCLO28
+ALL DONE
