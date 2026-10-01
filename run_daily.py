@@ -139,6 +139,25 @@ def pick_next_topic(posted_records):
     return min(FACTS_POOL, key=lambda item: last_posted.get(item["id"], ""))
 
 
+def _niche_allowed(item, lang):
+    """SHORTS NICHE LOCK (owner directive 2026-10-02): only the two proven winners.
+
+    Data: طنز روزمره score 6.9, روانشناسی رابطه score 6.7 - everything else < 3.2.
+    FA: only روانشناسی/طنز categories. EN mirrors: psychology/relationships/dating/
+    love + comedy/humor/entertainment. Set PADIZ_SHORTS_ALL_NICHES=1 to unlock all.
+    """
+    if os.environ.get("PADIZ_SHORTS_ALL_NICHES", "") == "1":
+        return True
+    cat = str((item or {}).get("category", "")).lower()
+    niche = str((item or {}).get("niche", "")).lower()
+    blob = cat + " " + niche
+    if lang == "fa":
+        return ("روانشناسی" in blob) or ("طنز" in blob)
+    want = ("psycholog", "relation", "dating", "love",
+            "comedy", "humor", "humour", "entertain", "funny")
+    return any(w in blob for w in want)
+
+
 def main():
     dry_run = os.environ.get("VIRAL_DRY_RUN") == "1"
     ensure_auth()
@@ -184,14 +203,14 @@ def main():
             import gen_shorts as GS
             dynamic = [t for t in GS.load_generated()
                        if t.get("lang") == lang and not t.get("posted")
-                       and t["id"] not in posted_ids]
+                       and t["id"] not in posted_ids and _niche_allowed(t, lang)]
             # تازه‌هایی که با Gemini نوشته شده‌اند جلوتر از قالب‌های آماده‌اند.
             g, fb = [t for t in dynamic if not t.get("fallback")], [t for t in dynamic if t.get("fallback")]
             dynamic = g + fb
         except Exception:
             dynamic = []
 
-        fresh = [it for it in pool if it["id"] not in posted_ids]
+        fresh = [it for it in pool if it["id"] not in posted_ids and _niche_allowed(it, lang)]
         ordered = [dict(t) for t in dynamic] + [
             dict(item, lang=lang) for item in
             sorted(fresh, key=lambda it: -performance(it))
@@ -209,8 +228,9 @@ def main():
                 last_posted[tid] = st
         print("Pool exhausted - recycling a proven performer (oldest first)...")
         # Among topics not posted in a while, prefer the ones that performed.
-        eligible = [it for it in pool if last_posted.get(it["id"], "")[:10] < _today()]
-        candidates = eligible or list(pool)
+        eligible = [it for it in pool if last_posted.get(it["id"], "")[:10] < _today()
+                    and _niche_allowed(it, lang)]
+        candidates = eligible or [it for it in pool if _niche_allowed(it, lang)] or list(pool)
         best = min(candidates,
                    key=lambda it: (-performance(it), last_posted.get(it["id"], "")))
         return dict(best, lang=lang)

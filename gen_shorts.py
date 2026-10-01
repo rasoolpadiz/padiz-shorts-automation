@@ -72,12 +72,18 @@ def _prompt(lang, niche, discovery):
         f"Rules: title ends with ' #shorts'; each speech {wmin}-{wmax} words, "
         "spoken naturally; each text is ONE punchy on-screen line (max 9 words); "
         "image_query is 3-5 words of a REAL photo; never mention other channels; "
-        "slide 1 is the hook - the single wildest line, no greeting."
+        "HOOK LAW (slide 1): open with ONE hard shocking claim WITH a specific number "
+        "or fact - pattern interrupt, NO greeting, NO 'hey guys', NO 'in this video', "
+        "NO 'did you know'. Examples: 'Your brain lies to you 2 hours every night.' "
+        "Slide 1 speech must contain a number or a concrete claim."
         if lang == "en" else
         f"قوانین: تیتر با « #shorts» تمام شود؛ هر speech بین {wmin} تا {wmax} کلمه، "
         "محاوره‌ای؛ هر text فقط یک جملهٔ کوتاه روی تصویر (حداکثر ۸ کلمه)؛ "
         "image_query سه تا پنج کلمه توصیف عکس واقعی؛ نام کانال دیگران را نبر؛ "
-        "اسلاید اول قلاب است - تک‌جملهٔ عجیب، بدون سلام و مقدمه."
+        "قانون قلاب (اسلاید ۱): با یک ادعای شوک‌آور و مشخص WITH عدد یا واقعیت شروع کن - "
+        "بدون سلام، بدون «امروز می‌خوام»، بدون «در این ویدیو»، بدون «آیا می‌دانستید». "
+        "مثال: «مغزت هر شب ۲ ساعت بهت دروغ می‌گه.» "
+        "speech اسلاید ۱ حتماً باید عدد یا ادعای مشخص داشته باشد."
     )
     evidence = (
         f'Trending evidence (use as raw material, never copy verbatim):\n'
@@ -128,7 +134,7 @@ def _valid(data, lang):
     if len(data["slides"]) != 3:
         return False
     wmin, wmax = _speech_range(lang)
-    for s in data["slides"]:
+    for i, s in enumerate(data["slides"]):
         if not isinstance(s, dict):
             return False
         if not s.get("title") or not s.get("text"):
@@ -138,6 +144,18 @@ def _valid(data, lang):
             return False
         if words > wmax + 8:
             return False
+        # HOOK LAW: slide 1 must open with a number or concrete claim, never a
+        # greeting. Reject "hello/salam/today I want/in this video/did you know".
+        if i == 0:
+            low = str(s.get("speech") or "").lower()
+            banned = ("hello", "hey guys", "in this video", "did you know",
+                      "سلام", "امروز می‌خوام", "امروز میخوام", "در این ویدیو",
+                      "آیا می‌دانستید", "آیا میدانستید", "میدونی چیه")
+            if any(b in low for b in banned):
+                return False
+            import re as _re
+            if not _re.search(r"\d|[۰-۹]", str(s.get("speech") or "")):
+                return False
     if not data.get("title"):
         return False
     return True
@@ -202,9 +220,9 @@ def _template(lang, niche, discovery, topic_id):
     spoken = " ".join(words[:9])
     if lang == "en":
         slides = [
-            {"title": "Did you know?",
+            {"title": "2 Hours of Lies!",
              "text": title[:60],
-             "speech": f"Here is what everyone is talking about: {spoken}. Stay with me.",
+             "speech": f"Your brain lies to you 2 hours every night: {spoken}. Stay with me.",
              "image_query": f"{niche} real photo"},
             {"title": "The key detail",
              "text": "The part nobody expected.",
@@ -221,9 +239,9 @@ def _template(lang, niche, discovery, topic_id):
                 "fallback": True}
     else:
         slides = [
-            {"title": "میدونی چیه؟",
+            {"title": "۲ ساعت دروغ هر شب!",
              "text": title[:60],
-             "speech": f"این چیزیه که همه دارن درباره‌اش حرف میزنن: {spoken}. بمون ببین.",
+             "speech": f"مغزت هر شب ۲ ساعت بهت دروغ می‌گه: {spoken}. بمون تا بگم چطور.",
              "image_query": f"{niche} عکس واقعی"},
             {"title": "نکتهٔ کلیدی",
              "text": "بخشی که هیچ‌کس انتظارش را نداشت.",
