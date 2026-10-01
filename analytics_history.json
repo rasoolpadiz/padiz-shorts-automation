@@ -2,11 +2,11 @@
  "snapshots": [
   {
    "videos": 31,
-   "views": 18152,
-   "short_views": 18058,
+   "views": 18176,
+   "short_views": 18082,
    "long_views": 94,
    "subs": 40,
-   "collected_at": "2026-10-01T11:21:12+00:00"
+   "collected_at": "2026-10-01T11:29:42+00:00"
   }
  ],
  "videos": [
@@ -15,10 +15,10 @@
    "title": "۳ حیوان خطرناک که ظاهرشون به شدت گول‌زننده‌ست! 🦅 #shorts",
    "published_at": "2026-09-30T23:15:42Z",
    "days_live": 1,
-   "views": 444,
-   "likes": 8,
+   "views": 470,
+   "likes": 9,
    "comments": 0,
-   "views_per_day": 444.0,
+   "views_per_day": 470.0,
    "duration": "PT26S",
    "kind": "short",
    "lang": "fa",
@@ -154,11 +154,11 @@
    "video_id": "J7v31_KK5g8",
    "title": "3 Ocean Creatures That Should Not Exist #shorts",
    "published_at": "2026-09-29T11:27:04Z",
-   "days_live": 1,
+   "days_live": 2,
    "views": 39,
    "likes": 1,
    "comments": 0,
-   "views_per_day": 39.0,
+   "views_per_day": 19.5,
    "duration": "PT14S",
    "kind": "short",
    "lang": "en",
@@ -197,10 +197,10 @@
    "title": "کارهایی که مغزت موقع خواب انجام می‌دهه! 😴 #shorts",
    "published_at": "2026-09-28T12:47:10Z",
    "days_live": 2,
-   "views": 1205,
+   "views": 1203,
    "likes": 17,
    "comments": 3,
-   "views_per_day": 602.5,
+   "views_per_day": 601.5,
    "duration": "PT26S",
    "kind": "short",
    "lang": "fa",
@@ -446,7 +446,7 @@
   }
  ],
  "scores": {
-  "fa|حیات وحش و شگفتی‌های طبیعت": 2.19,
+  "fa|حیات وحش و شگفتی‌های طبیعت": 2.304,
   "en|Crazy History": 2.494,
   "fa|طنز روزمره": 6.557,
   "en|The Psychology of Money": 0.342,
@@ -455,10 +455,10 @@
   "fa|روانشناسی رابطه": 6.364,
   "en|Space Facts": 0.609,
   "fa|شگفتی‌های بدن انسان": 5.565,
-  "en|Ocean Mysteries": 0.496,
+  "en|Ocean Mysteries": 0.415,
   "en|Relationship Psychology": 0.385,
   "fa|تاریخ شگفت‌انگیز": 1.699,
-  "fa|خواب و سلامت مغز": 3.006,
+  "fa|خواب و سلامت مغز": 3.002,
   "fa|رازهای فضا و کیهان": 0.688,
   "fa|موزیک‌های ترند وایرال": 0.552,
   "fa|ایرانگردی شگفت‌انگیز": 0.675,
@@ -466,6 +466,6 @@
   "fa|جادوی ادیت و فیلمبرداری": 0.554,
   "fa|احساسات و دلتنگی": 0.575
  },
- "latest": "2026-10-01T11:21:12+00:00",
+ "latest": "2026-10-01T11:29:42+00:00",
  "published": []
 }
