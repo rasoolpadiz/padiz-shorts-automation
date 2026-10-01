@@ -140,10 +140,27 @@ def main():
                 return 0.0
             return scores.get((lang, item.get("category") or ""), 0.0)
 
+        dynamic = []
+        try:
+            import gen_shorts as GS
+            dynamic = [t for t in GS.load_generated()
+                       if t.get("lang") == lang and not t.get("posted")
+                       and t["id"] not in posted_ids]
+            # تازه‌هایی که با Gemini نوشته شده‌اند جلوتر از قالب‌های آماده‌اند.
+            g, fb = [t for t in dynamic if not t.get("fallback")], [t for t in dynamic if t.get("fallback")]
+            dynamic = g + fb
+        except Exception:
+            dynamic = []
+
         fresh = [it for it in pool if it["id"] not in posted_ids]
-        if fresh:
-            # A stable sort keeps the original pool order for equal scores.
-            return dict(sorted(fresh, key=lambda it: -performance(it))[0], lang=lang)
+        ordered = [dict(t) for t in dynamic] + [
+            dict(item, lang=lang) for item in
+            sorted(fresh, key=lambda it: -performance(it))
+        ]
+        if ordered:
+            # Dynamic (freshly discovered) Shorts come first; the static pool
+            # keeps its performance order underneath.
+            return ordered[0]
 
         last_posted = {}
         for record in posted_records:
