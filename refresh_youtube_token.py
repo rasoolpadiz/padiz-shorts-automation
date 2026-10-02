@@ -57,6 +57,19 @@ def main(argv=None):
     ap.add_argument("--pat", default="", help="GitHub PAT برای آپدیت خودکار سکرت (اختیاری)")
     args = ap.parse_args(argv if argv is not None else sys.argv[1:])
 
+    print("=" * 68)
+    print("  بازسازی توکن یوتیوب - پادیز")
+    print("=" * 68)
+    print("  قبل از این اسکریپت، این لینک را باز کن و PUBLISH APP را بزن:")
+    print("    https://console.cloud.google.com/apis/credentials/consent?project=padiz-446920")
+    print("  (اگر Testing بماند، ۷ روز بعد دوباره توکن می‌میرد)")
+    print("-" * 68)
+    print("  الان مرورگر باز می‌شود. با همان اکانت کانال پادیز لاگین کن.")
+    print("  اگر صفحهٔ «Google hasn't verified this app» آمد:")
+    print("     Advanced  ->  Go to ... (unsafe)  ->  Allow")
+    print("=" * 68)
+    input("  برای شروع Enter بزن (یا Ctrl+C برای انصراف)... ")
+
     creds = new_token()
 
     with open(TOKEN_PATH, "wb") as fh:
