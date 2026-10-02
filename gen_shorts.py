@@ -98,21 +98,34 @@ def _prompt(lang, niche, discovery):
 
 
 def _call_gemini(prompt, api_key):
-    """One text-generation call. Returns the raw response string or ''."""
+    """One text-generation call. Returns the raw response string or ''.
+
+    Tries newest model first: Google retires old model names (2026-10 the hardcoded
+    gemini-2.0-flash returned 404 and every Short fell back to the template), so
+    the same fallback list gen_topics.py uses is applied here.
+    """
     import urllib.request
-    url = ("https://generativelanguage.googleapis.com/v1beta/models/"
-           "gemini-2.0-flash:generateContent?key=" + api_key)
     body = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode()
-    req = urllib.request.Request(url, data=body,
-                                 headers={"Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=90) as resp:
-            data = json.loads(resp.read().decode("utf-8", "replace"))
-        parts = data["candidates"][0]["content"]["parts"]
-        return "".join(p.get("text", "") for p in parts)
-    except Exception as e:
-        _log(f"[genshorts] gemini text failed ({e})")
-        return ""
+    last_err = ""
+    for model in ("gemini-3.8-flash", "gemini-2.5-flash-preview", "gemini-2.0-flash"):
+        url = ("https://generativelanguage.googleapis.com/v1beta/models/"
+               f"{model}:generateContent?key=" + api_key)
+        req = urllib.request.Request(url, data=body,
+                                     headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=90) as resp:
+                data = json.loads(resp.read().decode("utf-8", "replace"))
+            parts = data["candidates"][0]["content"]["parts"]
+            return "".join(p.get("text", "") for p in parts)
+        except Exception as e:
+            last_err = str(e)
+            # 429/400 quota or auth: trying other models will not help.
+            if "429" in last_err or "API key" in last_err:
+                break
+            continue
+    if last_err:
+        _log(f"[genshorts] gemini text failed ({last_err})")
+    return ""
 
 
 def _extract_json(text):
@@ -317,7 +330,13 @@ def build_short(lang, niche=None, discovery=None, api_key=None, dry_run=False):
             import discover as D
             if niche is None:
                 niche = D.niches_to_probe(lang, 1)[0]
-            discovery = D.best_for(lang) or {}
+            # Walk the ranked pool and take the first story NOT yet covered;
+            # otherwise one already-made top item blocks every future Short.
+            pool = (D._json_load(D.POOL_PATH, {}).get(lang) or {}).get("items", [])
+            discovery = next(
+                (it for it in pool
+                 if _slug(it.get("title", "")) not in covered), None)
+            discovery = discovery or D.best_for(lang) or {}
         except Exception as e:
             _log(f"[genshorts] discovery unavailable ({e})")
             discovery = {}
