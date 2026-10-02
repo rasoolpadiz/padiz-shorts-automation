@@ -98,6 +98,36 @@ def ensure_auth():
             print("ERROR: token.pickle not found and YOUTUBE_TOKEN_B64 is not set.")
             sys.exit(1)
 
+
+def verify_token_or_die():
+    """Fail LOUDLY and EARLY when the OAuth token is dead.
+
+    On 2026-10-02 the token was revoked (invalid_grant) and the pipeline still
+    spent a full render + Gemini TTS call before crashing at the upload step, so
+    the day's quota was burned for nothing. Checking here costs one API call and
+    saves the whole run. It still exits non-zero on purpose: a silent green run
+    is exactly what hid this outage for hours.
+    """
+    try:
+        import token_health
+        ok, channel, err = token_health.check()
+    except Exception as e:  # noqa: BLE001
+        print(f"[auth] could not run token check ({e}) - continuing")
+        return
+    if ok:
+        print(f"[auth] token OK | channel: {channel}")
+        return
+    print("=" * 60)
+    print(f"[auth] FATAL: YouTube token is dead -> {err}")
+    print("        Nothing was rendered, so no quota was wasted.")
+    print("        Fix (2 min):")
+    print("          1) Publish the OAuth app:")
+    print("             https://console.cloud.google.com/apis/credentials/consent?project=padiz-446920")
+    print("          2) python refresh_youtube_token.py")
+    print("          3) python refresh_youtube_token.py --pat <GITHUB_PAT>")
+    print("=" * 60)
+    sys.exit(1)
+
 def load_posted():
     if os.path.exists(POSTED_FILE):
         try:
@@ -162,6 +192,12 @@ def main():
                   f"(minimum gap between uploads is {MIN_GAP_MINUTES} minutes).")
             print("Nothing to do - safe exit.")
             return
+
+    # Cheap up-front auth check: a dead token used to burn a full render + TTS
+    # call before failing at the upload step. Checked AFTER the gap/cap guards so
+    # a harmless no-op run never reports an auth failure.
+    if not dry_run:
+        verify_token_or_die()
 
     # Alternating mode: FA run <-> EN run.
     # EN replaces the old viral-downloader: same self-made style, English audience.

@@ -1,0 +1,127 @@
+name: Padiz Token Health
+
+# چرا این workflow وجود دارد؟
+# 2026-10-02 توکن یوتیوب باطل شد (invalid_grant) و هیچ ویدیویی آپلود نشد؛
+# ۶ ساعت بعد فهمیدیم. این چک روزی یک‌بار *قبل* از اسلات اول آپلود اجرا می‌شود
+# و اگر توکن خراب بود، همان لحظه یک Issue باز می‌کند. اگر سالم شد، Issue را می‌بندد.
+
+on:
+  schedule:
+    # 03:40 UTC = 07:10 Tehran - قبل از اولین Short (09:30 Tehran)
+    - cron: '40 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: padiz-token-health
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install google-api-python-client google-auth-oauthlib google-auth-httplib2
+
+      - name: Check YouTube token
+        id: health
+        env:
+          YOUTUBE_TOKEN_B64: ${{ secrets.YOUTUBE_TOKEN_B64 }}
+        run: |
+          set +e
+          python token_health.py --json > token_health.json
+          cat token_health.json
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          d = json.load(open("token_health.json", encoding="utf-8"))
+          ok = "true" if d["ok"] else "false"
+          err = (d["error"] or "unknown").replace("\n", " ")[:400]
+          print(f"ok={ok}")
+          print(f"channel={d['channel']}")
+          print("error<<EOF")
+          print(err)
+          print("EOF")
+          PY
+
+      # توکن باطل = آپلود امروز قطع است. Issue خودکار می‌سازد تا فوراً بفهمی.
+      - name: Open issue when token is dead
+        if: steps.health.outputs.ok == 'false'
+        uses: actions/github-script@v7
+        env:
+          ERR: ${{ steps.health.outputs.error }}
+        with:
+          script: |
+            const title = '🔴 توکن یوتیوب باطل شد - آپلود متوقف است';
+            const body = [
+              '## توکن یوتیوب کار نمی‌کند',
+              '',
+              'آخرین چک: `' + new Date().toISOString().replace('T',' ').slice(0,19) + ' UTC`',
+              '',
+              'خروجی `token_health.py`:',
+              '```',
+              process.env.ERR || '(بدون جزئیات)',
+              '```',
+              '',
+              '### فیکس (۲ دقیقه)',
+              '1. اپ را Publish کن (یک‌بار برای همیشه):',
+              '   https://console.cloud.google.com/apis/credentials/consent?project=padiz-446920',
+              '2. `cd C:\\youtube_pipeline && python refresh_youtube_token.py`',
+              '3. `python refresh_youtube_token.py --pat <GITHUB_PAT>`',
+              '   یا مقدار `YOUTUBE_TOKEN_B64.txt` را در Settings → Secrets → Actions آپدیت کن.',
+              '',
+              'جزئیات: `FIX_TOKEN_FA.md`'
+            ].join('\n');
+            const open = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'token-alert',
+            });
+            if (open.data.length) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: open.data[0].number, body,
+              });
+              console.log('commented on existing issue #' + open.data[0].number);
+            } else {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: ['token-alert'],
+              });
+              console.log('created issue #' + created.data.number);
+            }
+
+      # توکن سالم شد → هشدار را ببند تا فقط هشدارهای واقعی باز بمانند.
+      - name: Close alert when token works again
+        if: steps.health.outputs.ok == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const open = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'token-alert',
+            });
+            for (const issue of open.data) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number,
+                body: '✅ توکن دوباره سالم شد (کانال: `${{ steps.health.outputs.channel }}`). آپلودها از سر گرفته می‌شوند.',
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number, state: 'closed',
+              });
+            }
+            console.log('closed ' + open.data.length + ' alert(s)');

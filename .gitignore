@@ -43,3 +43,4 @@ voice_check/
 
 # Fonts (Vazirmatn-*.ttf) and background music (sad_aesthetic_bg.mp3) ARE
 # tracked assets used by the runner, so they are deliberately not ignored.
+token_health.json
