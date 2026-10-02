@@ -9,6 +9,12 @@ on:
     # 17:00 UTC = 20:30 Tehran -> FA (Iran evening prime)
     # 20:00 UTC = 23:30 Tehran -> FA (Iran late-evening prime)
     - cron: '0 6,10,14,17,20 * * *'
+    # Catch-up slots, +2h after each primary. GitHub's cron is best-effort and
+    # it silently DROPPED the 06:00 UTC slot on 2026-10-02 (zero runs that day),
+    # so a missed slot needs a second chance. Safe to duplicate: run_daily has a
+    # 90-minute minimum gap AND a hard MAX 5 Shorts/day cap, so a catch-up after
+    # a successful primary becomes a harmless no-op instead of an extra upload.
+    - cron: '0 8,12,16,19,22 * * *'
   workflow_dispatch:
     inputs:
       test_only:
