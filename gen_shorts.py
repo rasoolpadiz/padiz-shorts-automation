@@ -500,8 +500,15 @@ def top_up(lang, count):
     channel's approved list) and content_mine pulls the text - the old
     discovery_pool title is only a fallback when mining is off.
     """
+    # Only PUBLISHABLE drafts count toward the target. Old drafts written before
+    # mining was wired up carry no mined_from, and run_daily refuses those - so
+    # counting them made top_up report "0 new" on an empty, unpublishable stock.
     existing = [t for t in load_generated()
-                if t.get("lang") == lang and not t.get("posted")]
+                if t.get("lang") == lang and not t.get("posted")
+                and not t.get("fallback") and t.get("mined_from")]
+    if len(existing) < count:
+        _log(f"[genshorts] {lang}: {len(existing)} publishable draft(s), "
+             f"need {count - len(existing)} more")
     need = max(0, count - len(existing))
     made = []
     for _ in range(min(need, MAX_FRESH_PER_RUN)):
@@ -512,6 +519,9 @@ def top_up(lang, count):
             item = None
         if item:
             made.append(item)
+    if not made:
+        _log(f"[genshorts] {lang}: every approved niche failed to mine - "
+             "nothing publishable this run")
     return made
 
 
