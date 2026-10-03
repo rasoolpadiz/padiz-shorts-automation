@@ -76,6 +76,10 @@ jobs:
         env:
           YOUTUBE_TOKEN_B64: ${{ secrets.YOUTUBE_TOKEN_B64 }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # A forced verification run must always write a fresh mined Short -
+          # otherwise the pipeline falls back to the static pool and the video
+          # is not built from the online content.
+          FORCE_TOPUP: ${{ (inputs.force_upload || inputs.test_only) && '1' || '0' }}
         run: |
           python - <<'PY' || echo "::warning::shorts top-up failed - using the static pool"
           import os, sys
