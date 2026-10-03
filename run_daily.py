@@ -222,7 +222,7 @@ def main():
             dynamic = [t for t in GS.load_generated()
                        if t.get("lang") == lang and not t.get("posted")
                        and not t.get("fallback")
-                       and t.get("mined_from")
+                       and (t.get("mined") or t.get("mined_from"))
                        and t["id"] not in posted_ids and _niche_allowed(t, lang)]
         except Exception:
             dynamic = []

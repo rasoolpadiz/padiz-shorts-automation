@@ -388,6 +388,11 @@ def load_generated():
     return out
 
 
+def query_fallback(niche, lang):
+    """Readable stand-in when a mined source came back without a title."""
+    return str(niche or ("Online article" if lang == "en" else "مقالهٔ اینترنتی"))
+
+
 def build_short(lang, niche=None, discovery=None, api_key=None, dry_run=False):
     """Write one new Short JSON from a discovery. Never raises."""
     api_key = (api_key or os.environ.get("GEMINI_API_KEY") or "").strip()
@@ -427,8 +432,12 @@ def build_short(lang, niche=None, discovery=None, api_key=None, dry_run=False):
             mined = CM.mine(niche, lang)
             if mined:
                 source_text = mined.get("text", "")
+                # Explicit flag: run_daily gates on this. Deriving "was it
+                # mined?" from a title string failed whenever a source had an
+                # empty title, which silently blocked every Persian publish.
                 mined_meta = {
-                    "mined_from": mined.get("source_title", ""),
+                    "mined": True,
+                    "mined_from": mined.get("source_title") or query_fallback(niche, lang),
                     "mined_url": mined.get("source_url", ""),
                     "mined_views": mined.get("views", 0),
                 }
@@ -505,7 +514,7 @@ def top_up(lang, count):
     # counting them made top_up report "0 new" on an empty, unpublishable stock.
     existing = [t for t in load_generated()
                 if t.get("lang") == lang and not t.get("posted")
-                and not t.get("fallback") and t.get("mined_from")]
+                and not t.get("fallback") and (t.get("mined") or t.get("mined_from"))]
     if len(existing) < count:
         _log(f"[genshorts] {lang}: {len(existing)} publishable draft(s), "
              f"need {count - len(existing)} more")
