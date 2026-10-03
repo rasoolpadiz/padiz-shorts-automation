@@ -70,6 +70,9 @@ jobs:
           fi
           # Fail fast (clear message) if a Python dependency is missing.
           python -c "import numpy, PIL, edge_tts, googleapiclient, arabic_reshaper, bidi; print('deps OK')"
+          # run_long_daily.py (unlike run_daily.py) never materialises token.pickle
+          # itself, so decode the secret here or the upload dies with FileNotFoundError.
+          python -c "import base64,os,pathlib;t=os.environ.get('YOUTUBE_TOKEN_B64','').strip();p=pathlib.Path('token.pickle');(p.write_bytes(base64.b64decode(t)) if (t and not p.exists()) else None);print('[CI] token.pickle ->', p.stat().st_size if p.exists() else 'MISSING')"
           echo "[CI] Running: python run_long_daily.py $ARGS"
           python run_long_daily.py $ARGS
           echo "[CI] Exit code: $?"
