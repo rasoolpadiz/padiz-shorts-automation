@@ -515,17 +515,99 @@ def top_up(lang, count):
     return made
 
 
+def _norm_niche(s):
+    """Loose niche key: folds ZWNJ, Arabic/Persian letter variants, punctuation.
+
+    The analytics snapshot and topics_niches.py disagree on spelling in places
+    ("حیات وحش و شگفتی‌های طبیعت" vs the repo's shorter forms, English casing,
+    "The Psychology of Money" vs "money"). Folding them here is what makes the
+    ranking actually connect to real data instead of matching 2 of 20.
+    """
+    s = str(s or "").strip().lower()
+    s = s.replace("\u200c", " ").replace("\u200f", " ").replace("\u200e", " ")
+    s = s.replace("ي", "ی").replace("ك", "ک")   # Arabic -> Persian
+    s = s.replace("‌", " ")
+    s = re.sub(r"^(the|a|an)\s+", "", s)
+    s = re.sub(r"[^\w\s؀-ۿ]+", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _niche_performance(lang):
+    """Real per-niche performance of THIS channel, as a lookup that tolerates
+    spelling differences between the analytics snapshot and the repo niche list.
+    """
+    try:
+        import analytics as A
+        raw = A.load_scores() or {}
+    except Exception:
+        raw = {}
+    if not raw:
+        # Fall back to the raw snapshot keys ("lang|niche" strings).
+        try:
+            import json
+            hist = json.load(open("analytics_history.json", encoding="utf-8"))
+            for k, v in (hist.get("scores") or {}).items():
+                if "|" in k:
+                    l, n = k.split("|", 1)
+                    raw[(l, n)] = v
+        except Exception:
+            pass
+    return {(_norm_niche(n), l): float(v) for (l, n), v in raw.items()}
+
+
+def score_for(scores, lang, niche):
+    """Exact key, then folded key, then a token-overlap best guess."""
+    key = (_norm_niche(niche), lang)
+    if key in scores:
+        return scores[key]
+    nk = _norm_niche(niche)
+    if not nk:
+        return 0.0
+    tokens = {t for t in nk.split() if len(t) > 2}
+    best, best_hits = 0.0, 0
+    for (other, olang), val in scores.items():
+        if olang != lang or not val:
+            continue
+        ot = {t for t in other.split() if len(t) > 2}
+        hits = len(tokens & ot)
+        if hits > best_hits or (hits == best_hits and hits and val > best):
+            best, best_hits = val, hits
+    # Need real overlap, not a single accidental word.
+    return best if best_hits >= max(1, len(tokens) // 2) else 0.0
+
+
 def _repo_niche_queue(lang):
-    """Approved niches from the repo, least-recently-mined first."""
+    """Approved niches from the repo, ranked by what the channel already does
+    well on, then least-recently-mined so nothing is starved.
+
+    2026-10-03: was a plain round-robin (niches_to_probe order), which ignored
+    the analytics entirely. Now proven performers are mined first, and the
+    weakest niches keep a floor so they are still sampled occasionally.
+    """
     try:
         import discover as D
-        return D.niches_to_probe(lang, 6)
+        niches = list(D.niches_to_probe(lang, 40))
     except Exception:
         try:
             import topics_niches as N
-            return list(N.EN_NICHES if lang == "en" else N.FA_NICHES)[:6]
+            niches = list(N.EN_NICHES if lang == "en" else N.FA_NICHES)
         except Exception:
             return []
+
+    scores = _niche_performance(lang)
+
+    def rank(niche):
+        return -score_for(scores, lang, niche)
+
+    ranked = sorted(niches, key=rank)
+    if scores:
+        best = [n for n in ranked if score_for(scores, lang, n) > 0]
+        rest = [n for n in ranked if score_for(scores, lang, n) <= 0]
+        _log(f"[genshorts] niche ranking ({lang}): "
+             + ", ".join(f"{n[:20]}={score_for(scores, lang, n):.1f}" for n in best[:5])
+             + f" | {len(rest)} unproven after")
+        ranked = best + rest
+    return ranked[:6]
 
 
 def _already_mined(niche):
