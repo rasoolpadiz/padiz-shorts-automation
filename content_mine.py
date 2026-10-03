@@ -176,33 +176,119 @@ def search_news(query, lang="fa", n=4):
     return items
 
 
-def search_wikipedia(query, lang="fa"):
-    """Wikipedia summaries - free, no key, never rate-limited hard.
+STOP_WORDS_FA = {"و", "در", "از", "به", "با", "برای", "های", "ها", "هاـ", "مورد",
+                 "روزمره", "روز", "که", "را", "این", "آن", "یک", "تا", "هایی"}
+STOP_WORDS_EN = {"and", "the", "of", "a", "an", "for", "to", "in", "on", "with", "facts",
+                 "explained", "history", "daily", "of the"}
 
-    Owner directive 2026-10-03: YouTube is not the only source. Wikipedia is a
-    reliable fallback that gives real explanatory prose for almost any niche.
+
+def _wiki_terms(query, lang):
+    """Turn a niche label into 2-3 things Wikipedia actually has articles about.
+
+    "طنز روزمره" is not a page; "طنز" and "شوخی" are. Stripping the generic
+    qualifier words leaves the topical core, which the search API can match.
+    """
+    words = [w for w in str(query).split() if w]
+    stops = STOP_WORDS_FA if lang == "fa" else STOP_WORDS_EN
+    core = [w for w in words if w.lower() not in stops]
+    terms = []
+    if core:
+        terms.append(" ".join(core))          # "پول اقتصاد"
+        if len(core) > 1:
+            terms.append(core[0])              # "پول"
+    if words:
+        terms.append(query)                   # full label as a last try
+    seen, out = set(), []
+    for t in terms:
+        k = t.lower().strip()
+        if k and k not in seen:
+            seen.add(k)
+            out.append(t)
+    return out[:3]
+
+
+def search_wikiquote(query, lang="fa"):
+    """Wikiquote / dictionary-style pages: short, quote-heavy, language rich.
+
+    Useful for humor/psychology niches where the encyclopedia has no long
+    article but the quote wiki still has substantive Persian text.
+    """
+    import urllib.parse
+    api = ("https://fa.wikiquote.org/w/api.php" if lang == "fa"
+           else "https://en.wikiquote.org/w/api.php")
+    try:
+        req = urllib.request.Request(
+            api + "?action=query&prop=extracts&explaintext=1&format=json&titles="
+            + urllib.parse.quote(query), headers={"User-Agent": "PadizAutomation/1.0"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+    except Exception:
+        return None
+    for _k, page in ((data.get("query") or {}).get("pages") or {}).items():
+        text = (page.get("extract") or "").strip()
+        if len(text) > 200:
+            return {"title": page.get("title", query), "text": text, "url": ""}
+    return None
+
+
+def search_wikipedia(query, lang="fa"):
+    """Wikipedia article text - free, no key, effectively unlimited.
+
+    Owner directive 2026-10-03: YouTube is not the only source. Two paths here,
+    because a niche name like "طنز روزمره" is NOT a Wikipedia page title:
+      1) direct title lookup (exact article)
+      2) full-text SEARCH, then take the best-matching article's body
+    Without (2) almost every Persian niche returned nothing.
     """
     import urllib.parse
     api = "https://fa.wikipedia.org/w/api.php" if lang == "fa" else "https://en.wikipedia.org/w/api.php"
-    url = (api + "?action=query&prop=extracts&explaintext=1"
-           "&redirects=1&format=json&exlimit=1&titles="
-           + urllib.parse.quote(query))
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "PadizAutomation/1.0"})
-        with urllib.request.urlopen(req, timeout=20) as r:
-            data = json.loads(r.read().decode("utf-8", "replace"))
-    except Exception as e:
-        _log(f"[mine] wikipedia failed ({e})")
-        return None
-    pages = (data.get("query") or {}).get("pages") or {}
-    for _k, page in pages.items():
-        if page.get("missing"):
-            continue
+    ua = {"User-Agent": "PadizAutomation/1.0"}
+
+    def _get(params):
+        try:
+            req = urllib.request.Request(api + "?" + params, headers=ua)
+            with urllib.request.urlopen(req, timeout=20) as r:
+                return json.loads(r.read().decode("utf-8", "replace"))
+        except Exception:
+            return None
+
+    def _clean(page, title):
         text = (page.get("extract") or "").strip()
         if len(text) < 120:
-            continue
-        return {"title": page.get("title", query), "url": page.get("fullurl", ""),
-                "text": text, "views": 0}
+            return None
+        return {"title": title or page.get("title", query), "text": text,
+                "url": page.get("fullurl", "")}
+
+    # 1) exact title
+    data = _get("action=query&prop=extracts&explaintext=1&redirects=1"
+                "&format=json&exlimit=1&titles=" + urllib.parse.quote(query))
+    if data:
+        for _k, page in ((data.get("query") or {}).get("pages") or {}).items():
+            if not page.get("missing"):
+                hit = _clean(page, query)
+                if hit:
+                    return hit
+
+    # 2) full-text search, a few related terms
+    for term in _wiki_terms(query, lang):
+        data = _get("action=query&list=search&srsearch=" + urllib.parse.quote(term)
+                    + f"&srlimit=3&format=json")
+        hits = ((data or {}).get("query") or {}).get("search") or []
+        for h in hits[:3]:
+            # Relevance guard: a Wikipedia article only counts if its own title
+            # shares a meaningful word with what we searched for. Without this,
+            # "طنز" matched an unrelated 182-word page and produced nonsense.
+            ht = set(str(h.get("title", "")).split())
+            if not (ht & set(term.split())):
+                continue
+            data = _get("action=query&prop=extracts&explaintext=1&redirects=1"
+                        "&format=json&exlimit=1&titles=" + urllib.parse.quote(h["title"]))
+            if data:
+                for _k, page in ((data.get("query") or {}).get("pages") or {}).items():
+                    hit = _clean(page, h.get("title"))
+                    if hit and len(hit["text"]) >= 800:
+                        return hit
+    return None
     return None
 
 
