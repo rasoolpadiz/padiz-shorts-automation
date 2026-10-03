@@ -21,6 +21,10 @@ on:
         description: "فقط تست (پیدا کردن + دانلود + برندینگ) بدون آپلود به یوتیوب"
         type: boolean
         default: false
+      force_upload:
+        description: "تست واقعی: نادیده‌گرفتن فاصله/سقف روزانه و آپلود واقعی"
+        type: boolean
+        default: false
       force_lang:
         description: "Force language: fa | en | empty=slot schedule"
         type: choice
@@ -100,6 +104,7 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           # FORCE_LANG: fa | en | empty (empty = slot->lang forcing by UTC hour)
           FORCE_LANG: ${{ inputs.force_lang || '' }}
+          FORCE_UPLOAD: ${{ inputs.force_upload && '1' || '0' }}
         run: |
           python run_daily.py
 

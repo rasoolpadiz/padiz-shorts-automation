@@ -27,6 +27,9 @@ TOKEN_PATH = os.path.join(BASE_DIR, "token.pickle")
 # while a scheduled run is already queued. This guard keeps at most one upload
 # per slot window, so redundant triggers become harmless no-ops.
 MIN_GAP_MINUTES = 90
+# Escape hatch for manual verification runs: uploads for real but ignores the
+# gap/cap guards. Never set on the scheduled slots.
+FORCE_UPLOAD = (os.environ.get("FORCE_UPLOAD") or "0") == "1"
 
 # Maximum shorts per day (owner directive 2026-10-01)
 MAX_SHORTS_PER_DAY = 5
@@ -183,7 +186,7 @@ def main():
     posted_records = load_posted()
 
     gap = minutes_since_last_post(posted_records)
-    if gap is not None and gap < MIN_GAP_MINUTES:
+    if gap is not None and gap < MIN_GAP_MINUTES and not (FORCE_UPLOAD and not dry_run):
         if dry_run:
             print(f"(test_only: the {MIN_GAP_MINUTES}-minute gap rule is ignored, "
                   f"last upload was {gap:.1f} minutes ago)")
@@ -261,7 +264,7 @@ def main():
         return dict(best, lang=lang)
 
     total_posted = len(posted_records)
-    if _posted_today_count(posted_records) >= MAX_SHORTS_PER_DAY:
+    if _posted_today_count(posted_records) >= MAX_SHORTS_PER_DAY and not (FORCE_UPLOAD and not dry_run):
         print(f"Daily cap reached ({MAX_SHORTS_PER_DAY}/day) - safe exit.")
         return
     force_lang = (os.environ.get("FORCE_LANG") or "").strip().lower()
