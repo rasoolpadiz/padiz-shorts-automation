@@ -51,9 +51,11 @@ jobs:
           cache: 'pip'
 
       - name: Install system dependencies (FFmpeg + fonts)
+        # -qq keeps the log small; do NOT remove this step - system packages
+        # are NOT cached between runners, so a fresh install is required.
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg fonts-dejavu-core
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core
 
       - name: Install Python dependencies
         run: |
@@ -62,21 +64,34 @@ jobs:
 
       # Keep a small buffer of freshly-discovered Shorts so run_daily always has
       # something new. Owner directive: Shorts should also come from the internet,
-      # not only from the fixed pool. Capped at 2 per run and never fatal - if
-      # discovery or the writer fails, run_daily falls back to the static pool.
+      # not only from the fixed pool. Runs for BOTH languages only when at least
+      # MIN_GAP_MINUTES has passed since the last upload - otherwise the run is a
+      # no-op anyway, so the 2 Gemini text calls of the top-up are skipped and
+      # the minutes budget only pays for checkout + setup (~1-2 min).
       - name: Top up dynamic Shorts from discovered topics
         env:
           YOUTUBE_TOKEN_B64: ${{ secrets.YOUTUBE_TOKEN_B64 }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           python - <<'PY' || echo "::warning::shorts top-up failed - using the static pool"
-          import gen_shorts as GS
-          for lang in ("fa", "en"):
-              try:
-                  made = GS.top_up(lang, 2)
-                  print(f"[shorts] {lang}: {len(made)} new")
-              except Exception as e:
-                  print(f"[shorts] {lang} top-up failed: {e}")
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from datetime import datetime, timezone
+          import run_daily as RD
+          # Cheap gate: if this run will exit early (gap/cap), skip the writer -
+          # top-ups also cover tomorrow, but one no-op run does not need them.
+          gap = RD.minutes_since_last_post(RD.load_posted())
+          need_topup = (os.environ.get("FORCE_TOPUP", "") == "1")
+          if gap is not None and gap < RD.MIN_GAP_MINUTES and not need_topup:
+              print(f"[shorts] last upload {gap:.0f}m ago - top-up skipped, static pool is enough")
+          else:
+              import gen_shorts as GS
+              for lang in ("fa", "en"):
+                  try:
+                      made = GS.top_up(lang, 2)
+                      print(f"[shorts] {lang}: {len(made)} new")
+                  except Exception as e:
+                      print(f"[shorts] {lang} top-up failed: {e}")
           PY
 
       - name: Run automated Shorts pipeline (FA/EN self-made, no downloader)
