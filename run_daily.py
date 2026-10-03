@@ -31,15 +31,16 @@ MIN_GAP_MINUTES = 90
 # gap/cap guards. Never set on the scheduled slots.
 FORCE_UPLOAD = (os.environ.get("FORCE_UPLOAD") or "0") == "1"
 
-# Maximum shorts per day (owner directive 2026-10-01)
-MAX_SHORTS_PER_DAY = 5
+# Maximum shorts per day (owner directive 2026-10-03, lowered from 5).
+# YouTube enforces uploadLimitExceeded on young channels; 6 uploads in one day
+# tripped it and blocked the rest of the day's slots.
+MAX_SHORTS_PER_DAY = 3
 
 # Slot -> language forcing (peak-audience schedule, Tehran = UTC+3:30).
-# FA wins Iran peaks: 13:30 lunch + 20:30/23:30 evening (UTC 10,17,20).
-# EN wins US/EU peaks: 09:30 Tehran = EU morning, 17:30 Tehran = EU lunch /
-# US morning (UTC 6,14). Any other hour (manual runs) falls back to alternate.
-FA_SLOT_HOURS_UTC = {10, 17, 20}
-EN_SLOT_HOURS_UTC = {6, 14}
+# FA wins Iran peaks: 13:30 lunch + 20:30 evening (UTC 10, 17).
+# EN wins US/EU peaks: 17:30 Tehran = EU lunch / US morning (UTC 14).
+FA_SLOT_HOURS_UTC = {10, 17}
+EN_SLOT_HOURS_UTC = {14}
 
 
 def lang_for_utc_hour(h):

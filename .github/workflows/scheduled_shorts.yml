@@ -2,19 +2,18 @@ name: Padiz 24/7 Shorts Automation
 
 on:
   schedule:
-    # Runs 5 times a day (UTC -> Tehran UTC+3:30), language forced by slot:
-    # 06:00 UTC = 09:30 Tehran -> EN (EU morning / US overnight push)
+    # 3 Shorts/day (owner directive 2026-10-03, lowered from 5 after YouTube
+    # returned uploadLimitExceeded). Tehran = UTC+3:30:
     # 10:00 UTC = 13:30 Tehran -> FA (Iran lunch peak)
-    # 14:00 UTC = 17:30 Tehran -> EN (EU lunch / US morning peak)
+    # 14:00 UTC = 17:30 Tehran -> EN (EU lunch / US morning)
     # 17:00 UTC = 20:30 Tehran -> FA (Iran evening prime)
-    # 20:00 UTC = 23:30 Tehran -> FA (Iran late-evening prime)
-    - cron: '0 6,10,14,17,20 * * *'
+    - cron: '0 10,14,17 * * *'
     # Catch-up slots, +2h after each primary. GitHub's cron is best-effort and
     # it silently DROPPED the 06:00 UTC slot on 2026-10-02 (zero runs that day),
     # so a missed slot needs a second chance. Safe to duplicate: run_daily has a
-    # 90-minute minimum gap AND a hard MAX 5 Shorts/day cap, so a catch-up after
+    # 90-minute minimum gap AND a hard 3 Shorts/day cap, so a catch-up after
     # a successful primary becomes a harmless no-op instead of an extra upload.
-    - cron: '0 8,12,16,19,22 * * *'
+    - cron: '0 12,16,19 * * *'
   workflow_dispatch:
     inputs:
       test_only:
