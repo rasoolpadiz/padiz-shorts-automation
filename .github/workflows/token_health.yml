@@ -46,12 +46,19 @@ jobs:
           python token_health.py --json > token_health.json
           cat token_health.json
           python - <<'PY' >> "$GITHUB_OUTPUT"
-          import json
-          d = json.load(open("token_health.json", encoding="utf-8"))
+          import json, sys
+          raw = open("token_health.json", encoding="utf-8", errors="replace").read().strip()
+          # tolerate stray prints / trailing junk by parsing the first JSON object
+          try:
+              d = json.loads(raw)
+          except Exception:
+              dec = json.JSONDecoder()
+              d, _idx = dec.raw_decode(raw)
           ok = "true" if d["ok"] else "false"
-          err = (d["error"] or "unknown").replace("\n", " ")[:400]
+          err = (d["error"] or "unknown").replace("\n", " ").replace("\r", " ")[:400]
+          chan = d["channel"].replace("\n", " ").replace("\r", " ")
           print(f"ok={ok}")
-          print(f"channel={d['channel']}")
+          print(f"channel={chan}")
           print("error<<EOF")
           print(err)
           print("EOF")

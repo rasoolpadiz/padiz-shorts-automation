@@ -75,7 +75,9 @@ def main(argv=None):
         pass
 
     if "--json" in argv:
-        print(json.dumps(result, ensure_ascii=False))
+        # ensure_ascii=True: the channel title may contain line-separator
+        # chars (U+2028/U+2029) which would otherwise break json.load downstream
+        print(json.dumps(result, ensure_ascii=True))
     elif ok:
         print(f"PASS  توکن سالم است | کانال: {name}")
     else:
