@@ -596,6 +596,25 @@ QUOTA_GEMINI_ERROR_MARKERS = (
 )
 
 
+# Owner directive (2026-10-03): Persian narration must NEVER use edge-tts.
+# Edge-tts Persian sounds robotic and often unintelligible, so a Persian video
+# with no Gemini voice is worse than no video at all. When the narration text
+# is Persian and Gemini TTS is unavailable, the pipeline refuses to render and
+# fails loudly instead of publishing a robotic video. English keeps the
+# edge-tts fallback (it sounds acceptable there).
+# Escape hatch: set FA_ALLOW_EDGE_VOICE=1 to re-enable the fallback.
+_FA_VOICE_STRICT = os.environ.get("FA_ALLOW_EDGE_VOICE", "").strip().lower() not in ("1", "true", "yes", "on")
+
+
+def _refuse_robotic_fa(text: str):
+    """Raise for Persian text when Gemini TTS is unavailable. No-op otherwise."""
+    if _FA_VOICE_STRICT and is_fa_text(text):
+        raise RuntimeError(
+            "Gemini TTS unavailable for Persian text - refusing edge-tts "
+            "fallback (robotic/unintelligible). Set FA_ALLOW_EDGE_VOICE=1 to override."
+        )
+
+
 def gemini_voice_enabled() -> bool:
     """Gemini narration is used unless it is switched off by env or a prior failure."""
     if _gemini_voice_disabled:
@@ -777,6 +796,10 @@ def generate_voice(text: str, voice: str, output_path: str):
     except Exception as e:
         print(f"[voice] Gemini voice error ({e}) -> falling back to edge-tts.")
 
+    # Persian strict mode: a robotic edge-tts Persian video is worse than none.
+    if is_fa_text(text):
+        _refuse_robotic_fa(text)
+
     asyncio.run(generate_voice_edge(text, voice, output_path))
 
 def _detect_silences(audio_path: str, noise_db: int = -35, min_dur: float = 0.25):
@@ -873,6 +896,22 @@ def generate_voice_batch(texts: list, voice: str, out_paths: list) -> bool:
         return False
 
     combined = "\n\n".join(t.strip() for t in texts if t and t.strip())
+    if _FA_VOICE_STRICT and any(is_fa_text(t) for t in texts):
+        # Persian batched path: never silently produce a robotic video. If the
+        # one-shot Gemini call fails, raise instead of falling back to edge-tts.
+        gemini_voice = gemini_voice_for(voice)
+        tmp_mp3 = os.path.join(BASE_DIR, "temp_render", "_batch_narration.mp3")
+        os.makedirs(os.path.dirname(tmp_mp3), exist_ok=True)
+        if not generate_voice_gemini(combined, tmp_mp3, voice_name=gemini_voice):
+            _refuse_robotic_fa(combined)
+        if split_audio_by_silence(tmp_mp3, len(out_paths), out_paths,
+                                  weights=[len(t.strip()) for t in texts]):
+            print(f"[voice] one-shot Gemini narration split into {len(out_paths)} clips "
+                  f"(voice={gemini_voice})")
+            return True
+        # Gemini spoke but clips could not be aligned - per-slide voices are still
+        # safe (they go through generate_voice, which enforces the same rule).
+        print("[voice] batch narration could not be split cleanly - using per-slide voices.")
     gemini_voice = gemini_voice_for(voice)
     tmp_mp3 = os.path.join(BASE_DIR, "temp_render", "_batch_narration.mp3")
     os.makedirs(os.path.dirname(tmp_mp3), exist_ok=True)
