@@ -206,69 +206,47 @@ def main():
     # EN replaces the old viral-downloader: same self-made style, English audience.
     # Odd total_posted -> EN turn; even -> FA turn (FA pool untouched).
     def pick_from(pool, posted_records):
-        """Fresh topic first; among fresh ones, the proven performer wins.
+        """ONLY mined online content is publishable.
 
-        Owner directive 2026-10-01: make more of what actually gets views.
-        Ranking uses real YouTube numbers from analytics.py. When there is no
-        data the original pool order is kept, so behaviour is unchanged.
+        Owner directive 2026-10-03 (final): the repo's hand-written FACTS_POOL is
+        banned. Every Short must be written from text the miner pulled off the
+        web (content_mine.mine) and then rewritten by Gemini. If nothing was
+        mined this run the pipeline produces NOTHING - that is the intent, not a
+        bug to be worked around.
         """
         lang = "en" if pool is FACTS_POOL_EN else "fa"
         posted_ids = {r["id"] for r in posted_records}
+        dynamic = []
+        try:
+            import gen_shorts as GS
+            dynamic = [t for t in GS.load_generated()
+                       if t.get("lang") == lang and not t.get("posted")
+                       and not t.get("fallback")
+                       and t.get("mined_from")
+                       and t["id"] not in posted_ids and _niche_allowed(t, lang)]
+        except Exception:
+            dynamic = []
 
+        if not dynamic:
+            print("[shorts] NO mined online content available this run - "
+                  "nothing is published (the hand-written pool is disabled by "
+                  "owner directive).")
+            return None
+
+        # Best niche first, then the freshest draft inside it.
         def performance(item):
-            """Real median views/day of this topic's category; 0 when unknown."""
             try:
                 import analytics as A
                 scores = A.load_scores()
             except Exception:
                 return 0.0
-            if not scores:
-                return 0.0
-            return scores.get((lang, item.get("category") or ""), 0.0)
+            return (scores or {}).get((lang, item.get("category") or ""), 0.0)
 
-        dynamic = []
-        try:
-            import gen_shorts as GS
-            # A template/fallback draft has no real narration behind it, so it must
-            # never reach the channel - Gemini drafts always win instead, and the
-            # static pool (which has full hand-written text) is the safety net.
-            dynamic = [t for t in GS.load_generated()
-                       if t.get("lang") == lang and not t.get("posted")
-                       and not t.get("fallback")
-                       and t["id"] not in posted_ids and _niche_allowed(t, lang)]
-        except Exception:
-            dynamic = []
-
-        fresh = [it for it in pool if it["id"] not in posted_ids and _niche_allowed(it, lang)]
-        ordered = [dict(t) for t in dynamic] + [
-            dict(item, lang=lang) for item in
-            sorted(fresh, key=lambda it: -performance(it))
-        ]
-        if ordered:
-            # Dynamic (mined from the web) Shorts ALWAYS win. Owner directive:
-            # the repo supplies only the niche, the video text comes from
-            # top-performing online content - the static pool is just the
-            # fallback when nothing was mined this run.
-            if dynamic:
-                print(f"Using mined online content: {dynamic[0].get('title', '')[:70]}")
-                return ordered[0]
-            print("No mined draft available - falling back to the static pool")
-            return ordered[0]
-
-        last_posted = {}
-        for record in posted_records:
-            tid = record.get("id")
-            st = record.get("posted_at") or ""
-            if tid not in last_posted or st > last_posted[tid]:
-                last_posted[tid] = st
-        print("Pool exhausted - recycling a proven performer (oldest first)...")
-        # Among topics not posted in a while, prefer the ones that performed.
-        eligible = [it for it in pool if last_posted.get(it["id"], "")[:10] < _today()
-                    and _niche_allowed(it, lang)]
-        candidates = eligible or [it for it in pool if _niche_allowed(it, lang)] or list(pool)
-        best = min(candidates,
-                   key=lambda it: (-performance(it), last_posted.get(it["id"], "")))
-        return dict(best, lang=lang)
+        dynamic.sort(key=lambda it: -performance(it))
+        print(f"Using mined online content: {dynamic[0].get('title', '')[:70]} "
+              f"(source: {str(dynamic[0].get('mined_from', ''))[:60]}, "
+              f"{dynamic[0].get('mined_views', 0):,} views)")
+        return dict(dynamic[0], lang=lang)
 
     total_posted = len(posted_records)
     if _posted_today_count(posted_records) >= MAX_SHORTS_PER_DAY and not (FORCE_UPLOAD and not dry_run):
@@ -294,6 +272,11 @@ def main():
     else:
         print("FA turn: rendering Persian Short...")
         candidate = pick_from(FACTS_POOL, posted_records)
+
+    if candidate is None:
+        print("[shorts] Nothing to publish - the hand-written pool is disabled, "
+              "so no Short is published without freshly mined online content.")
+        return
 
     print(f"Selected topic: {candidate['title']} (ID: {candidate['id']})")
     out_video = os.path.join(BASE_DIR, f"short_{candidate['id']}.mp4")

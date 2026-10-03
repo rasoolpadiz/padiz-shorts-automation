@@ -90,16 +90,20 @@ jobs:
           # top-ups also cover tomorrow, but one no-op run does not need them.
           gap = RD.minutes_since_last_post(RD.load_posted())
           need_topup = (os.environ.get("FORCE_TOPUP", "") == "1")
-          if gap is not None and gap < RD.MIN_GAP_MINUTES and not need_topup:
-              print(f"[shorts] last upload {gap:.0f}m ago - top-up skipped, static pool is enough")
-          else:
+          # Mining is the ONLY source of text now, so always try to mine at least
+          # one topic per language. Without this the run finds an empty pool and
+          # publishes nothing.
+          want = 2 if need_topup else 1
+          if need_topup or gap is None or gap >= RD.MIN_GAP_MINUTES:
               import gen_shorts as GS
               for lang in ("fa", "en"):
                   try:
-                      made = GS.top_up(lang, 2)
+                      made = GS.top_up(lang, want)
                       print(f"[shorts] {lang}: {len(made)} new")
                   except Exception as e:
                       print(f"[shorts] {lang} top-up failed: {e}")
+          else:
+              print(f"[shorts] last upload {gap:.0f}m ago - writer skipped")
           PY
 
       - name: Run automated Shorts pipeline (FA/EN self-made, no downloader)

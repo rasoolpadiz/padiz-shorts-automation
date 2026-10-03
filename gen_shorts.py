@@ -477,16 +477,12 @@ def build_short(lang, niche=None, discovery=None, api_key=None, dry_run=False):
                 )
 
     if data is None:
-        if not gem_title:
-            _log("[genshorts] nothing to say - skipping")
-            return None
-        tpl = _template(lang, niche, discovery, topic_id)
-        data = tpl if isinstance(tpl, dict) else None
-        if data is None:
-            _log("[genshorts] template failed - skipping")
-            return None
-        data["fallback"] = True
-        _log("[genshorts] gemini text unavailable - used template (marked fallback)")
+        # Owner directive 2026-10-03: the hand-written template is BANNED. Writing
+        # filler ("the part nobody expected" / "save and follow") is worse than
+        # publishing nothing, so a failed draft simply produces no Short.
+        _log("[genshorts] gemini draft rejected twice - skipping this topic "
+             "instead of using the banned template")
+        return None
 
     data = _normalize(data, lang, niche, discovery, topic_id)
     data.update(mined_meta)
