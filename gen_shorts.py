@@ -63,28 +63,25 @@ def _json_save(path, data):
 def _prompt(lang, niche, discovery, source_text=""):
     wmin, wmax = _speech_range(lang)
     head = (
-        "Turn ONE trending story into a YouTube Short of 45-60 seconds of narration. "
-        "Use 4-7 slides - as many as the story actually needs, never padding. "
-        "Every slide must carry real information. "
+        "Turn ONE trending story into a YouTube Short that is a SINGLE full-screen "
+        "slide (exactly one slide, no second page). Write a long narration - "
+        "60-110 words - so the video runs about 40-70 seconds. "
         "Return ONLY valid JSON, no markdown, no commentary."
         if lang == "en" else
-        "از این سوژهٔ داغ، یک شورت ۴۵ تا ۶۰ ثانیه‌ای بساز. "
-        "بین ۴ تا ۷ اسلاید بسته به حجم واقعی داستان - نه بیشتر، نه کمتر، و هیچ اسلایدِ بی‌محتوایی. "
-        "هر اسلاید باید یک اطلاعات واقعی داشته باشد. "
+        "از این سوژهٔ داغ، یک شورت بساز که فقط و فقط یک صفحهٔ تمام‌صفحه دارد "
+        "(دقیقاً یک اسلاید، نه صفحهٔ دوم). روایت را بلند بنویس - ۶۰ تا ۱۱۰ کلمه - "
+        "تا ویدیو حدود ۴۰ تا ۷۰ ثانیه شود. "
         "فقط JSON معتبر برگردان، بدون توضیح اضافه."
     )
-    # Ellipsis-style placeholders rather than a literal 3-slide shape: the old
-    # shape anchored the model to exactly three slides and produced thin Shorts.
+    # Exactly one slide: the old variable-length shape produced multi-page videos.
     shape = (
         '{"title": "...", "slides": ['
-        '{"title": "...", "text": "...", "speech": "...", "image_query": "..."}'
-        + ", " * 5
-        + '{"title": "...", "text": "...", "speech": "...", "image_query": "..."}]}'
+        '{"title": "...", "text": "...", "speech": "...", "image_query": "..."}]}'
     )
     rules = (
         f"Rules: title ends with ' #shorts'; each speech {wmin}-{wmax} words, "
-        f"written at exactly {wmin}-{wmax} words (under {wmin} is rejected); "
-        "spoken naturally; each text is ONE punchy on-screen line (max 9 words); "
+        f"written at exactly {wmin}-{wmax} words (under {wmin - 10} is rejected); "
+        "spoken naturally; the on-screen text is ONE punchy headline line (max 9 words); "
         "image_query is 3-5 words of a REAL photo; never mention other channels; "
         "FILL the full 45-60 seconds: cover the hook, the mechanism, 2-3 concrete "
         "examples and a takeaway. Ban filler like 'did you know', 'imagine that', "
@@ -95,11 +92,11 @@ def _prompt(lang, niche, discovery, source_text=""):
         "NO 'did you know'. Examples: 'Your brain lies to you 2 hours every night.' "
         "Slide 1 speech must contain a number or a concrete claim."
         if lang == "en" else
-        f"قوانین: تیتر با « #shorts» تمام شود؛ هر speech بین {wmin} تا {wmax} کلمه، "
-        "محاوره‌ای؛ هر text فقط یک جملهٔ کوتاه روی تصویر (حداکثر ۸ کلمه)؛ "
+        f"قوانین: تیتر با « #shorts» تمام شود؛ بین {wmin} تا {wmax} کلمه در speech بنویس، "
+        "محاوره‌ای؛ text فقط یک جملهٔ کوتاه روی تصویر (حداکثر ۸ کلمه)؛ "
         "image_query سه تا پنج کلمه توصیف عکس واقعی؛ نام کانال دیگران را نبر؛ "
-        f"دقیقاً {wmin} تا {wmax} کلمه در هر speech بنویس (کمتر از {wmin} کلمه رد می‌شود). "
-        "کل ۴۵ تا ۶۰ ثانیه را پر کن: قلاب، مکانیسم، دو تا سه مثال مشخص، و یک جمع‌بندی. "
+        f"دقیقاً {wmin} تا {wmax} کلمه در speech بنویس (کمتر از {wmin - 10} کلمه رد می‌شود). "
+        "متن را پر کن: قلاب با عدد، مکانیسم، دو تا سه مثال مشخص از متن مبدأ، و یک جمع‌بندی. "
         "جمله‌های پرکننده مثل «بخشی که هیچ‌کس انتظارش را نداشت»، «تصور کنید»، "
         "«ذخیره کن و دنبال کن» ممنوع - هر جمله باید یک واقعیت تازه بدهد؛ "
         "قانون قلاب (اسلاید ۱): با یک ادعای شوک‌آور و مشخص WITH عدد یا واقعیت شروع کن - "
@@ -195,8 +192,8 @@ def _reject_reason(data, lang):
     if not isinstance(data, dict) or not isinstance(data.get("slides"), list):
         return "the JSON has no 'slides' array"
     slides = data["slides"]
-    if not 4 <= len(slides) <= 7:
-        return f"it has {len(slides)} slides; you must write between 4 and 7"
+    if len(slides) != 1:
+        return f"it has {len(slides)} slides; you must write EXACTLY one full-screen slide"
     wmin, wmax = _speech_range(lang)
     filler = ("بخشی که هیچ", "انتظارش را نداشت", "تصور کنید",
               "ذخیره کن و دنبال کن", "نکتهٔ کلیدی", "چرا مهمه",
@@ -208,11 +205,11 @@ def _reject_reason(data, lang):
             return f"slide {i + 1} is missing its title or on-screen text"
         speech = str(s.get("speech") or "")
         words = _words(speech)
-        if words < wmin - 6:
-            return (f"slide {i + 1} narration is only {words} words - "
-                    f"write at least {wmin - 6} words of real content")
-        if words > wmax + 8:
-            return f"slide {i + 1} narration is {words} words - cut it to {wmax}"
+        if words < wmin - 10:
+            return (f"the narration is only {words} words - "
+                    f"write at least {wmin - 10} words of real content")
+        if words > wmax + 15:
+            return f"the narration is {words} words - cut it to {wmax}"
         low = speech.lower()
         if any(f in low for f in filler):
             return (f"slide {i + 1} narration is filler like '{filler[0]}' - "
@@ -344,13 +341,13 @@ def _words(text):
     return len(str(text or "").split())
 
 
-def _speech_range(lang, slides=3):
-    """Words per slide so the Short lands in the 45-60s sweet spot.
+def _speech_range(lang, slides=1):
+    """Words for the single-slide narration, targeting a 40-70 second Short.
 
-    With the 4-7 slide variable length, 14-22 words per slide keeps a 5-slide
-    Persian Short around 50 seconds of narration.
+    The video length follows the audio automatically (pipeline.render derives
+    each clip's duration from its TTS audio), so the range IS the runtime.
     """
-    return (14, 22) if lang == "fa" else (15, 24)
+    return (60, 110) if lang == "fa" else (60, 115)
 
 
 def _covered_titles():
