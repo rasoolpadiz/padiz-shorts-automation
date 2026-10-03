@@ -25,7 +25,14 @@ GEN_DIR = os.path.join(BASE_DIR, "shorts_generated")
 
 MAX_FRESH_PER_RUN = int(os.environ.get("SHORTS_MAX_FRESH", "2"))
 
+# Mining (owner directive 2026-10-03): pull the top-performing text online for
+# the niche and use it as the source of the Short. ON by default; set
+# PADIZ_MINE=0 to go back to pure discovery titles.
 MUSIC_BY_LANG = {"en": "chill", "fa": "chill"}
+
+
+def _mine_enabled():
+    return os.environ.get("PADIZ_MINE", "1") not in ("0", "false", "no", "off")
 
 
 def _log(msg):
@@ -53,7 +60,7 @@ def _json_save(path, data):
         json.dump(data, f, ensure_ascii=False, indent=1)
 
 
-def _prompt(lang, niche, discovery):
+def _prompt(lang, niche, discovery, source_text=""):
     wmin, wmax = _speech_range(lang)
     head = (
         "Turn ONE trending story into a 3-slide YouTube Short. "
@@ -91,9 +98,25 @@ def _prompt(lang, niche, discovery):
         f'({discovery.get("source", "")}, {discovery.get("views", 0):,} views, '
         f'{discovery.get("velocity", 0):,.0f} views/hour)'
     )
+
+    mined = ""
+    if source_text:
+        # The repo only supplies the niche; this text is the top-performing
+        # online content for it (owner directive 2026-10-03). It is the SOURCE
+        # of the clip - build the 3 slides from these facts.
+        clip = source_text[:6000]
+        mined = (
+            "\n\nSOURCE MATERIAL (top-performing content found online for this niche):\n"
+            f'"""\n{clip}\n"""\n'
+            "Build the Short out of the strongest, most surprising facts in the SOURCE "
+            "MATERIAL above. Keep the facts and numbers. Do not invent new ones, do not "
+            "mention the source, and never quote a full sentence verbatim - rephrase it "
+            "into your own 3 slides."
+        )
+
     return (
         f"You write Shorts for the channel \"Padiz Studio\". "
-        f"Approved niche: **{niche}**.\n{evidence}\n\n{head}\n{shape}\n{rules}"
+        f"Approved niche: **{niche}**.\n{evidence}{mined}\n\n{head}\n{shape}\n{rules}"
     )
 
 
@@ -340,19 +363,57 @@ def build_short(lang, niche=None, discovery=None, api_key=None, dry_run=False):
         except Exception as e:
             _log(f"[genshorts] discovery unavailable ({e})")
             discovery = {}
-    niche = niche or discovery.get("niche") or ("AI" if lang == "en" else "AI")
+    niche = niche or discovery.get("niche") or ""
+    if not niche:
+        try:
+            import discover as D
+            niche = D.niches_to_probe(lang, 1)[0]
+        except Exception:
+            niche = "Interesting Facts" if lang == "en" else "دانستنی"
 
-    suffix = _slug(discovery.get("title", ""))[:22] or "story"
+    # OWNER DIRECTIVE 2026-10-03: the repo only supplies the NICHE. The content
+    # of the Short must come from the top-performing content found online for
+    # that niche - so pull the best source text BEFORE writing.
+    source_text = ""
+    mined_meta = {}
+    if _mine_enabled():
+        try:
+            import content_mine as CM
+            mined = CM.mine(niche, lang)
+            if mined:
+                source_text = mined.get("text", "")
+                mined_meta = {
+                    "mined_from": mined.get("source_title", ""),
+                    "mined_url": mined.get("source_url", ""),
+                    "mined_views": mined.get("views", 0),
+                }
+                _log(f"[genshorts] mined {mined.get('words')} words "
+                     f"from {mined.get('views'):,} views")
+        except Exception as e:
+            _log(f"[genshorts] mining unavailable ({type(e).__name__}: {str(e)[:110]})")
+
+    # The mined source IS the content of this Short, so its title wins over a
+    # stale discovery-pool headline (which pointed at a different story).
+    if source_text and mined_meta.get("mined_from"):
+        discovery = dict(discovery or {})
+        discovery["title"] = mined_meta["mined_from"]
+        discovery.setdefault("niche", niche)
+        discovery["source"] = "mined"
+        discovery["views"] = mined_meta.get("mined_views", 0)
+        discovery.setdefault("velocity", 0)
+
+    suffix = _slug(discovery.get("title", ""))[:22] or (_slug(source_text)[:22] or "story")
     topic_id = f"{lang}_auto_{_slug(niche)[:20]}_{suffix}"
-    if topic_id in covered or _slug(discovery.get("title", "")) in covered:
+    if topic_id in covered:
         _log("[genshorts] this story is already covered - skipping")
         return None
 
     data = None
     gem_key = (api_key or "").strip()
     gem_title = str((discovery or {}).get("title") or "") if isinstance(discovery, dict) else ""
-    if gem_key and gem_title:
-        data = _extract_json(_call_gemini(_prompt(lang, niche, discovery), gem_key))
+    if gem_key and (gem_title or source_text):
+        prompt = _prompt(lang, niche, discovery, source_text=source_text)
+        data = _extract_json(_call_gemini(prompt, gem_key))
         if not isinstance(data, dict) or not _valid(data, lang):
             if isinstance(data, dict):
                 _log("[genshorts] generation rejected (wrong shape) - trying template")
@@ -371,6 +432,7 @@ def build_short(lang, niche=None, discovery=None, api_key=None, dry_run=False):
         _log("[genshorts] gemini text unavailable - used template (marked fallback)")
 
     data = _normalize(data, lang, niche, discovery, topic_id)
+    data.update(mined_meta)
     if not dry_run:
         _json_save(os.path.join(GEN_DIR, f"{topic_id}.json"), data)
         _log(f"[genshorts] saved {topic_id} (fallback={data['fallback']})")
@@ -378,20 +440,60 @@ def build_short(lang, niche=None, discovery=None, api_key=None, dry_run=False):
 
 
 def top_up(lang, count):
-    """Ensure `count` fresh dynamic Shorts exist for this language."""
+    """Ensure `count` fresh dynamic Shorts exist for this language.
+
+    Owner directive 2026-10-03: the repo supplies the NICHE, the internet
+    supplies the content. So the niche list comes from topics_niches (the
+    channel's approved list) and content_mine pulls the text - the old
+    discovery_pool title is only a fallback when mining is off.
+    """
     existing = [t for t in load_generated()
                 if t.get("lang") == lang and not t.get("posted")]
     need = max(0, count - len(existing))
     made = []
     for _ in range(min(need, MAX_FRESH_PER_RUN)):
         try:
-            item = build_short(lang)
+            item = _build_from_repo_niche(lang) if _mine_enabled() else build_short(lang)
         except Exception as e:
             _log(f"[genshorts] build failed ({e})")
             item = None
         if item:
             made.append(item)
     return made
+
+
+def _repo_niche_queue(lang):
+    """Approved niches from the repo, least-recently-mined first."""
+    try:
+        import discover as D
+        return D.niches_to_probe(lang, 6)
+    except Exception:
+        try:
+            import topics_niches as N
+            return list(N.EN_NICHES if lang == "en" else N.FA_NICHES)[:6]
+        except Exception:
+            return []
+
+
+def _already_mined(niche):
+    """Have we already made a Short from this niche? Avoids grinding one niche."""
+    tag = _slug(niche)[:20]
+    for t in load_generated():
+        if t.get("lang") and tag and tag in str(t.get("id", "")):
+            return True
+    return False
+
+
+def _build_from_repo_niche(lang):
+    """Pick an approved niche from the repo and mine its best online text."""
+    for niche in _repo_niche_queue(lang):
+        if _already_mined(niche):
+            continue
+        item = build_short(lang, niche=niche)
+        if item:
+            return item
+        _log(f"[genshorts] {niche!r} produced nothing - trying next niche")
+    return None
 
 
 def mark_posted(topic_id):
