@@ -133,7 +133,31 @@ def _get(url, timeout=25, tries=3):
     raise last
 
 
-def _download(url, out_path):
+def _download(url, out_path, attempts=3):
+    """Fetch one image, retrying on rate limits.
+
+    Commons throttles GitHub's shared runner IPs hard: 2026-10-03 the long-form
+    run failed outright with HTTP 429 (Too Many Requests) plus 424s from the
+    upload.wikimedia.org mirrors. A single 429 is transient, so back off and
+    retry instead of killing the whole video.
+    """
+    last = None
+    for attempt in range(attempts):
+        if attempt:
+            time.sleep(2.5 * attempt)          # 2.5s, then 5s
+        try:
+            return _download_once(url, out_path)
+        except urllib.error.HTTPError as e:
+            last = e
+            # 429 = rate limited, 424/5xx = mirror hiccup: both worth a retry.
+            if e.code not in (429, 424, 500, 502, 503, 504):
+                raise
+        except Exception as e:  # noqa: BLE001 - transient network faults
+            last = e
+    raise last if last else RuntimeError("download failed")
+
+
+def _download_once(url, out_path):
     headers = {
         "User-Agent": UA_IMG,
         "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
