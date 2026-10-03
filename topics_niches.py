@@ -72,6 +72,9 @@ FA_NICHES = [
     "پول و اقتصاد روزمره",
     "هوش مصنوعی و تکنولوژی",
     "روانشناسی و رفتار انسان",
+    # Best-performing Persian niche on the channel (analytics median 6.0 views/day)
+    # but it was MISSING from this list, so the ranking could never reach it.
+    "طنز روزمره",
     "عجایب و رازهای حل‌نشده",
     "علم و فضا",
     "جغرافیا و کشورهای جهان",
