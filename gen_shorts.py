@@ -63,22 +63,33 @@ def _json_save(path, data):
 def _prompt(lang, niche, discovery, source_text=""):
     wmin, wmax = _speech_range(lang)
     head = (
-        "Turn ONE trending story into a 3-slide YouTube Short. "
+        "Turn ONE trending story into a YouTube Short of 45-60 seconds of narration. "
+        "Use 4-7 slides - as many as the story actually needs, never padding. "
+        "Every slide must carry real information. "
         "Return ONLY valid JSON, no markdown, no commentary."
         if lang == "en" else
-        "از این سوژهٔ داغ، یک شورت ۳ اسلایدی بساز. "
+        "از این سوژهٔ داغ، یک شورت ۴۵ تا ۶۰ ثانیه‌ای بساز. "
+        "بین ۴ تا ۷ اسلاید بسته به حجم واقعی داستان - نه بیشتر، نه کمتر، و هیچ اسلایدِ بی‌محتوایی. "
+        "هر اسلاید باید یک اطلاعات واقعی داشته باشد. "
         "فقط JSON معتبر برگردان، بدون توضیح اضافه."
     )
+    # Ellipsis-style placeholders rather than a literal 3-slide shape: the old
+    # shape anchored the model to exactly three slides and produced thin Shorts.
     shape = (
         '{"title": "...", "slides": ['
-        '{"title": "...", "text": "...", "speech": "..."}, '
-        '{"title": "...", "text": "...", "speech": "..."}, '
-        '{"title": "...", "text": "...", "speech": "..."}]}'
+        '{"title": "...", "text": "...", "speech": "...", "image_query": "..."}'
+        + ", " * 5
+        + '{"title": "...", "text": "...", "speech": "...", "image_query": "..."}]}'
     )
     rules = (
         f"Rules: title ends with ' #shorts'; each speech {wmin}-{wmax} words, "
+        f"written at exactly {wmin}-{wmax} words (under {wmin} is rejected); "
         "spoken naturally; each text is ONE punchy on-screen line (max 9 words); "
         "image_query is 3-5 words of a REAL photo; never mention other channels; "
+        "FILL the full 45-60 seconds: cover the hook, the mechanism, 2-3 concrete "
+        "examples and a takeaway. Ban filler like 'did you know', 'imagine that', "
+        "'the part nobody expected', 'save and follow' - every sentence must add "
+        "a fact the viewer did not have; "
         "HOOK LAW (slide 1): open with ONE hard shocking claim WITH a specific number "
         "or fact - pattern interrupt, NO greeting, NO 'hey guys', NO 'in this video', "
         "NO 'did you know'. Examples: 'Your brain lies to you 2 hours every night.' "
@@ -87,6 +98,10 @@ def _prompt(lang, niche, discovery, source_text=""):
         f"قوانین: تیتر با « #shorts» تمام شود؛ هر speech بین {wmin} تا {wmax} کلمه، "
         "محاوره‌ای؛ هر text فقط یک جملهٔ کوتاه روی تصویر (حداکثر ۸ کلمه)؛ "
         "image_query سه تا پنج کلمه توصیف عکس واقعی؛ نام کانال دیگران را نبر؛ "
+        f"دقیقاً {wmin} تا {wmax} کلمه در هر speech بنویس (کمتر از {wmin} کلمه رد می‌شود). "
+        "کل ۴۵ تا ۶۰ ثانیه را پر کن: قلاب، مکانیسم، دو تا سه مثال مشخص، و یک جمع‌بندی. "
+        "جمله‌های پرکننده مثل «بخشی که هیچ‌کس انتظارش را نداشت»، «تصور کنید»، "
+        "«ذخیره کن و دنبال کن» ممنوع - هر جمله باید یک واقعیت تازه بدهد؛ "
         "قانون قلاب (اسلاید ۱): با یک ادعای شوک‌آور و مشخص WITH عدد یا واقعیت شروع کن - "
         "بدون سلام، بدون «امروز می‌خوام»، بدون «در این ویدیو»، بدون «آیا می‌دانستید». "
         "مثال: «مغزت هر شب ۲ ساعت بهت دروغ می‌گه.» "
@@ -103,15 +118,16 @@ def _prompt(lang, niche, discovery, source_text=""):
     if source_text:
         # The repo only supplies the niche; this text is the top-performing
         # online content for it (owner directive 2026-10-03). It is the SOURCE
-        # of the clip - build the 3 slides from these facts.
+        # of the clip - build the slides from these facts.
         clip = source_text[:6000]
         mined = (
             "\n\nSOURCE MATERIAL (top-performing content found online for this niche):\n"
             f'"""\n{clip}\n"""\n'
             "Build the Short out of the strongest, most surprising facts in the SOURCE "
             "MATERIAL above. Keep the facts and numbers. Do not invent new ones, do not "
-            "mention the source, and never quote a full sentence verbatim - rephrase it "
-            "into your own 3 slides."
+            "mention the source, and never quote a full sentence verbatim - rephrase "
+            "them into your own slides. Cover the WHOLE source: if it lists 7 signs or "
+            "5 reasons, cover them all instead of stopping at the first few."
         )
 
     return (
@@ -130,7 +146,13 @@ def _call_gemini(prompt, api_key):
     import urllib.request
     body = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode()
     last_err = ""
-    for model in ("gemini-3.8-flash", "gemini-2.5-flash-preview", "gemini-2.0-flash"):
+    # Only names verified to exist on the live API (2026-10). gemini-3.8-flash
+    # is NOT a real text model - it 404s - which silently pushed every Short
+    # onto the meaningless template. Verify with:
+    #   GET /v1beta/models?key=... and read the "name" fields.
+    for model in ("gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash",
+                  "gemini-3-flash-preview", "gemini-flash-latest",
+                  "gemini-2.5-flash"):
         url = ("https://generativelanguage.googleapis.com/v1beta/models/"
                f"{model}:generateContent?key=" + api_key)
         req = urllib.request.Request(url, data=body,
@@ -163,38 +185,55 @@ def _extract_json(text):
     return data if isinstance(data, dict) else None
 
 
-def _valid(data, lang):
-    """Three complete slides in the right length band - enforced, not trusted."""
+def _reject_reason(data, lang):
+    """Return '' when the draft is publishable, else why it was refused.
+
+    Splitting the verdict out of _valid() lets the caller log the exact rule the
+    model broke AND re-ask with that reason, instead of silently dropping to the
+    template.
+    """
     if not isinstance(data, dict) or not isinstance(data.get("slides"), list):
-        return False
-    if len(data["slides"]) != 3:
-        return False
+        return "the JSON has no 'slides' array"
+    slides = data["slides"]
+    if not 4 <= len(slides) <= 7:
+        return f"it has {len(slides)} slides; you must write between 4 and 7"
     wmin, wmax = _speech_range(lang)
-    for i, s in enumerate(data["slides"]):
+    filler = ("بخشی که هیچ", "انتظارش را نداشت", "تصور کنید",
+              "ذخیره کن و دنبال کن", "نکتهٔ کلیدی", "چرا مهمه",
+              "the part nobody expected", "imagine that", "save and follow")
+    for i, s in enumerate(slides):
         if not isinstance(s, dict):
-            return False
+            return f"slide {i + 1} is not an object"
         if not s.get("title") or not s.get("text"):
-            return False
-        words = _words(s.get("speech"))
-        if words < wmin - 2:
-            return False
+            return f"slide {i + 1} is missing its title or on-screen text"
+        speech = str(s.get("speech") or "")
+        words = _words(speech)
+        if words < wmin - 6:
+            return (f"slide {i + 1} narration is only {words} words - "
+                    f"write at least {wmin - 6} words of real content")
         if words > wmax + 8:
-            return False
-        # HOOK LAW: slide 1 must open with a number or concrete claim, never a
-        # greeting. Reject "hello/salam/today I want/in this video/did you know".
+            return f"slide {i + 1} narration is {words} words - cut it to {wmax}"
+        low = speech.lower()
+        if any(f in low for f in filler):
+            return (f"slide {i + 1} narration is filler like '{filler[0]}' - "
+                    "replace it with an actual fact")
         if i == 0:
-            low = str(s.get("speech") or "").lower()
             banned = ("hello", "hey guys", "in this video", "did you know",
                       "سلام", "امروز می‌خوام", "امروز میخوام", "در این ویدیو",
                       "آیا می‌دانستید", "آیا میدانستید", "میدونی چیه")
             if any(b in low for b in banned):
-                return False
+                return "slide 1 starts with a greeting - open with the shocking claim instead"
             import re as _re
-            if not _re.search(r"\d|[۰-۹]", str(s.get("speech") or "")):
-                return False
+            if not _re.search(r"\d|[۰-۹]", speech):
+                return "slide 1 narration has no number or concrete claim"
     if not data.get("title"):
-        return False
-    return True
+        return "the JSON has no title"
+    return ""
+
+
+def _valid(data, lang):
+    """4-7 substantive slides within the speech band - enforced, not trusted."""
+    return not _reject_reason(data, lang)
 
 
 def _normalize(data, lang, niche, discovery, topic_id):
@@ -306,9 +345,12 @@ def _words(text):
 
 
 def _speech_range(lang, slides=3):
-    """Words per slide so the Short lands in the 25-50s sweet spot."""
-    # Template speech has fixed filler around the hook, so give slide-1 room.
-    return (8, 22) if lang == "fa" else (10, 24)
+    """Words per slide so the Short lands in the 45-60s sweet spot.
+
+    With the 4-7 slide variable length, 14-22 words per slide keeps a 5-slide
+    Persian Short around 50 seconds of narration.
+    """
+    return (14, 22) if lang == "fa" else (15, 24)
 
 
 def _covered_titles():
@@ -413,11 +455,23 @@ def build_short(lang, niche=None, discovery=None, api_key=None, dry_run=False):
     gem_title = str((discovery or {}).get("title") or "") if isinstance(discovery, dict) else ""
     if gem_key and (gem_title or source_text):
         prompt = _prompt(lang, niche, discovery, source_text=source_text)
-        data = _extract_json(_call_gemini(prompt, gem_key))
-        if not isinstance(data, dict) or not _valid(data, lang):
-            if isinstance(data, dict):
-                _log("[genshorts] generation rejected (wrong shape) - trying template")
-            data = None
+        # Two attempts: a draft that misses one rule (usually a slide a couple of
+        # words short) is worth one retry with the reason attached rather than
+        # falling straight to the template.
+        for attempt in (1, 2):
+            data = _extract_json(_call_gemini(prompt, gem_key))
+            reason = _reject_reason(data, lang) if data else "no JSON returned"
+            if not reason:
+                break
+            _log(f"[genshorts] draft rejected ({reason})"
+                 + ("" if attempt == 2 else " - retrying once"))
+            if attempt == 2:
+                data = None
+            else:
+                prompt += (
+                    "\n\nIMPORTANT - your previous attempt was REJECTED because: "
+                    + reason + ". Fix exactly that and return the corrected JSON only."
+                )
 
     if data is None:
         if not gem_title:

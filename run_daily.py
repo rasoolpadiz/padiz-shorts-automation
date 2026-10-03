@@ -229,12 +229,13 @@ def main():
         dynamic = []
         try:
             import gen_shorts as GS
+            # A template/fallback draft has no real narration behind it, so it must
+            # never reach the channel - Gemini drafts always win instead, and the
+            # static pool (which has full hand-written text) is the safety net.
             dynamic = [t for t in GS.load_generated()
                        if t.get("lang") == lang and not t.get("posted")
+                       and not t.get("fallback")
                        and t["id"] not in posted_ids and _niche_allowed(t, lang)]
-            # تازه‌هایی که با Gemini نوشته شده‌اند جلوتر از قالب‌های آماده‌اند.
-            g, fb = [t for t in dynamic if not t.get("fallback")], [t for t in dynamic if t.get("fallback")]
-            dynamic = g + fb
         except Exception:
             dynamic = []
 
