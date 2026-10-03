@@ -121,6 +121,78 @@ def search_news(query, lang="fa", n=4):
     return items
 
 
+def search_wikipedia(query, lang="fa"):
+    """Wikipedia summaries - free, no key, never rate-limited hard.
+
+    Owner directive 2026-10-03: YouTube is not the only source. Wikipedia is a
+    reliable fallback that gives real explanatory prose for almost any niche.
+    """
+    import urllib.parse
+    api = "https://fa.wikipedia.org/w/api.php" if lang == "fa" else "https://en.wikipedia.org/w/api.php"
+    url = (api + "?action=query&prop=extracts&explaintext=1"
+           "&redirects=1&format=json&exlimit=1&titles="
+           + urllib.parse.quote(query))
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "PadizAutomation/1.0"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+    except Exception as e:
+        _log(f"[mine] wikipedia failed ({e})")
+        return None
+    pages = (data.get("query") or {}).get("pages") or {}
+    for _k, page in pages.items():
+        if page.get("missing"):
+            continue
+        text = (page.get("extract") or "").strip()
+        if len(text) < 120:
+            continue
+        return {"title": page.get("title", query), "url": page.get("fullurl", ""),
+                "text": text, "views": 0}
+    return None
+
+
+def search_reddit(query, lang="fa", n=3):
+    """Top Reddit posts for the niche - real discussion text, no key needed."""
+    import urllib.parse
+    sub = "iran" if lang == "fa" else "worldnews"
+    url = ("https://www.reddit.com/search.json?q=" + urllib.parse.quote(query)
+           + f"&sort=top&t=month&limit={n}")
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "PadizAutomation/1.0"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+    except Exception:
+        return []
+    out = []
+    for ch in ((data.get("data") or {}).get("children") or []):
+        d = ch.get("data") or {}
+        body = (d.get("selftext") or "").strip()
+        if len(body) > 300:
+            out.append({"title": d.get("title", ""), "text": body,
+                        "url": "https://reddit.com" + (d.get("permalink") or "")})
+    return out
+
+
+def search_hackernews(query, n=3):
+    """Algolia HN search - technical niches and evergreen psychology threads."""
+    import urllib.parse
+    url = "https://hn.algolia.com/api/v1/search?query=" + urllib.parse.quote(query) + f"&hitsPerPage={n}"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "PadizAutomation/1.0"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+    except Exception:
+        return []
+    out = []
+    for h in (data.get("hits") or []):
+        body = re.sub(r"<[^>]+>", " ", h.get("comment_text") or h.get("story_text") or "")
+        if len(body.split()) > 120:
+            out.append({"title": h.get("title") or h.get("story_title") or "",
+                        "text": body,
+                        "url": h.get("url") or "https://news.ycombinator.com/item?id=" + str(h.get("objectID"))})
+    return out
+
+
 TAG_RE = re.compile(r"<[^>]+>")
 TIME_RE = re.compile(r"^\s*(?:\d{1,2}:)?\d{1,2}:\d{2}[.,]\d{3}\s*-->")
 
@@ -229,7 +301,44 @@ def mine(niche, lang="fa", extra=""):
                     _log(f"[mine] fallback video used: {src_title[:50]}")
                     break
 
-    # 2) no video text -> use the best news article as extra raw material
+    # 2) no video text -> Wikipedia, then Reddit / Hacker News, then news
+    # articles. Owner directive 2026-10-03: never depend on a single source.
+    if not text:
+        try:
+            for term in (query, str(niche).strip()):
+                wiki = search_wikipedia(term, lang)
+                if wiki:
+                    src_title = wiki["title"]
+                    source_url = wiki["url"] or f"https://{lang}.wikipedia.org/wiki/{query}"
+                    text = wiki["text"]
+                    _log(f"[mine] wikipedia used ({len(text.split())} words)")
+                    break
+        except Exception as e:
+            _log(f"[mine] wikipedia failed ({e})")
+
+    if not text:
+        try:
+            for hit in (search_reddit(query, lang) or [])[:2]:
+                src_title = hit["title"] or query
+                source_url = hit["url"]
+                text = hit["text"]
+                _log(f"[mine] reddit used ({len(text.split())} words)")
+                break
+        except Exception as e:
+            _log(f"[mine] reddit failed ({e})")
+
+    if not text:
+        try:
+            for hit in (search_hackernews(query) or [])[:2]:
+                src_title = hit["title"] or query
+                source_url = hit["url"]
+                text = hit["text"]
+                _log(f"[mine] hackernews used ({len(text.split())} words)")
+                break
+        except Exception as e:
+            _log(f"[mine] hackernews failed ({e})")
+
+    # 3) last resort: the best news article
     if not text and news:
         src_title, source_url = news[0].get("title", ""), news[0].get("url", "")
         try:
