@@ -15,6 +15,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.request
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -66,14 +67,64 @@ def search_youtube(query, n=SEARCH_N):
     opts = {
         "quiet": True, "no_warnings": True, "skip_download": True,
         "noplaylist": True, "default_search": f"ytsearch{n}",
+        # Ranking now uses engagement + recency, so pull those fields too.
+        "extractor_args": {"youtube": {"skip": ["dash", "hls"]}},
+        "ignore_no_formats_error": True,
     }
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(query, download=False)
     return [e for e in (info.get("entries") or []) if e]
 
 
+def _recency_factor(e):
+    """1.0 for a fresh upload, decaying over ~1 year.
+
+    A 6-year-old viral video often covers a topic that has since been answered
+    better; a video from this week that is already climbing is the better bet.
+    """
+    ts = e.get("timestamp") or e.get("upload_date") or 0
+    try:
+        ts = float(ts)
+    except (TypeError, ValueError):
+        return 0.6
+    if ts > 1e11:          # millisecond epoch
+        ts /= 1000.0
+    if ts <= 0:
+        return 0.6
+    days = max(0.0, (time.time() - ts) / 86400.0)
+    return max(0.25, 1.0 - days / 365.0)
+
+
+def _engagement_rate(e):
+    """likes+comments per view, saturating around 5% - a real "people cared" signal."""
+    views = e.get("view_count") or 0
+    if views < MIN_VIEWS:
+        return 0.0
+    reacts = (e.get("like_count") or 0) + (e.get("comment_count") or 0)
+    return min(reacts / views, 0.05)
+
+
+def content_score(e):
+    """Rank candidates by what actually worked, not by raw view count.
+
+    score = (views per minute of runtime)  x  recency  x  (1 + engagement)
+
+    Raw view_count was the old key, which ranked 3-hour compilations above tight
+    explainers. Views-per-minute rewards dense, rewatchable content; the
+    engagement multiplier prefers clips viewers reacted to; recency keeps the
+    channel on topics people care about now.
+    """
+    views = e.get("view_count") or 0
+    dur = e.get("duration") or 0
+    vpm = views / max(dur / 60.0, 1.0) if dur else views / 8.0
+    # log-compress so a 10x-bigger video is not a 10x-better source
+    import math
+    base = math.log10(vpm + 1.0)
+    return base * (0.6 + 0.8 * _recency_factor(e)) * (1.0 + 20.0 * _engagement_rate(e))
+
+
 def pick_best(entries):
-    """Highest view_count that also has captions and a sane length."""
+    """Highest content_score among entries that have captions and a sane length."""
     usable = []
     for e in entries:
         if not e:
@@ -83,14 +134,18 @@ def pick_best(entries):
         dur = e.get("duration") or 0
         if dur and not (MIN_DURATION <= dur <= MAX_DURATION):
             continue
-        if not (e.get("automatic_captions") or e.get("subtitles")):
+        if not (e.get("subtitles") is not None or e.get("automatic_captions") is not None):
             continue
         usable.append(e)
     if not usable:
         return None
-    usable.sort(key=lambda e: (-(e.get("view_count") or 0),
-                               -(e.get("like_count") or 0)))
-    return usable[0]
+    usable.sort(key=lambda e: -content_score(e))
+    best = usable[0]
+    _log(f"[mine] best video: {str(best.get('title'))[:55]} "
+         f"({best.get('view_count', 0):,} views, "
+         f"score={content_score(best):.2f}, "
+         f"eng={_engagement_rate(best) * 100:.1f}%)")
+    return best
 
 
 def search_news(query, lang="fa", n=4):
