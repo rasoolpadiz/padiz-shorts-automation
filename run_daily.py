@@ -245,8 +245,14 @@ def main():
             sorted(fresh, key=lambda it: -performance(it))
         ]
         if ordered:
-            # Dynamic (freshly discovered) Shorts come first; the static pool
-            # keeps its performance order underneath.
+            # Dynamic (mined from the web) Shorts ALWAYS win. Owner directive:
+            # the repo supplies only the niche, the video text comes from
+            # top-performing online content - the static pool is just the
+            # fallback when nothing was mined this run.
+            if dynamic:
+                print(f"Using mined online content: {dynamic[0].get('title', '')[:70]}")
+                return ordered[0]
+            print("No mined draft available - falling back to the static pool")
             return ordered[0]
 
         last_posted = {}

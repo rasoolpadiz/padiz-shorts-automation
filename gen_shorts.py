@@ -377,8 +377,14 @@ def load_generated():
         if not name.endswith(".json"):
             continue
         d = _json_load(os.path.join(GEN_DIR, name), None)
-        if d and isinstance(d.get("slides"), list) and len(d["slides"]) == 3:
-            out.append(d)
+        if not (d and isinstance(d.get("slides"), list)):
+            continue
+        # Was `== 3`, which silently discarded every single-slide Short (the
+        # pipeline now writes exactly one full-screen slide), so the mined
+        # drafts never reached the channel. Only require at least one slide.
+        if len(d["slides"]) < 1:
+            continue
+        out.append(d)
     return out
 
 
