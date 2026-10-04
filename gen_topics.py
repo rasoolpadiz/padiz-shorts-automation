@@ -477,9 +477,16 @@ def build_topic(lang, niche=None, api_key=None, dry_run=False, kind="short"):
         data["hook"] = data["scenes"][0].get("speech", "")[:180]
 
     if not dry_run:
-        _json_save(os.path.join(GEN_DIR, f"{data['id']}.json"), data)
+        # A rejected (template) topic is NEVER written to disk: it cannot be
+        # published (the runner refuses fallback), so saving it would only let
+        # dead filler pile up inside topics_generated/ and pollute every future
+        # selection. The niche is still marked used so the queue moves on.
+        if data.get("fallback"):
+            print(f"[gen] fallback topic discarded (not saved): {data['id']}")
+        else:
+            _json_save(os.path.join(GEN_DIR, f"{data['id']}.json"), data)
+            print(f"[gen] saved {data['id']} ({len(data['scenes'])} scenes)")
         mark_niche_used(lang, niche)
-        print(f"[gen] saved {data['id']} ({len(data['scenes'])} scenes)")
     return data
 
 
