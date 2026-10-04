@@ -1,3 +1,3 @@
-Openverse/pdm/s.w.Lepak
-https://api.openverse.org/v1/images/bb1d06a0-4c5a-4f5d-aaa4-1b7ed3caf735/thumb/?full_size=true
+Openverse/pdm/State Library of South Australia
+https://api.openverse.org/v1/images/a526c42a-7a34-42eb-9bbe-d07c25ee355b/thumb/?full_size=true
 person thinking while looking at

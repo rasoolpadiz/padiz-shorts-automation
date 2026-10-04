@@ -1,3 +1,3 @@
 Openverse/pdm/NRCS Montana
-https://api.openverse.org/v1/images/96eff48f-c6e2-4c54-b90f-be56393e8b2e/thumb/?full_size=true
+https://api.openverse.org/v1/images/76bf57f3-65fd-4007-ba81-006b00d22f56/thumb/?full_size=true
 abandoned rusty machinery

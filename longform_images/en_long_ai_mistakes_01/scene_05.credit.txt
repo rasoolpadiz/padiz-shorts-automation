@@ -1,3 +1,3 @@
-Openverse/cc0/Sergey Tchernykov
-https://api.openverse.org/v1/images/64d2a492-5953-4683-b398-9399aee5af71/thumb/?full_size=true
+Openverse/cc0/Image Catalog
+https://api.openverse.org/v1/images/d5b8b82e-a79b-4cad-bff3-1e0b30a698ea/thumb/?full_size=true
 city street neon signs at
