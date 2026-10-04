@@ -68,7 +68,7 @@ def _slug(text, ascii_only=True):
     return s or "topic"
 
 
-def niche_queue(lang):
+def niche_queue(lang, kind="short"):
     """Niches still unused, ordered so proven winners are made more often.
 
     Owner directive 2026-10-01: "ویدیوهایی که بازدید می‌خورند را بیشتر کن".
@@ -76,11 +76,17 @@ def niche_queue(lang):
     a niche that has been used recently is only demoted, never hard-blocked, so
     a proven winner can come back after the cooldown.
 
+    kind="long" (owner directive 2026-10-04): restrict to the 5 monetisation
+    niches (LONG_ALLOWED_*). Shorts keep the full pool.
+
     If analytics_history.json is missing (first run, or the collector failed) the
     owner's approved order is returned untouched - the old behaviour.
     """
     used = _json_load(USED_NICHES, {})
     pool = N.EN_NICHES if lang == "en" else N.FA_NICHES
+    if kind == "long":
+        allowed = (N.LONG_ALLOWED_EN if lang == "en" else N.LONG_ALLOWED_FA)
+        pool = [n for n in allowed if n in pool] or list(allowed)
     used_set = set(used.get(lang, []))
 
     try:
@@ -422,11 +428,11 @@ def _extract_json(text):
         return None
 
 
-def build_topic(lang, niche=None, api_key=None, dry_run=False):
+def build_topic(lang, niche=None, api_key=None, dry_run=False, kind="short"):
     """Create one ready-to-render topic and save it. Never raises."""
     api_key = (api_key or os.environ.get("GEMINI_API_KEY") or "").strip()
     if niche is None:
-        queue = niche_queue(lang)
+        queue = niche_queue(lang, kind=kind)
         # Every approved niche used: recycle the list from the start.
         niche = queue[0] if queue else (N.EN_NICHES if lang == "en" else N.FA_NICHES)[0]
 

@@ -65,6 +65,24 @@ EN_NICHES = [
     "Communication", "Social Skills", "Wealth", "Success Stories",
 ]
 
+# Owner directive 2026-10-04 (monetisation focus): long-form videos are ONLY
+# built from these 5 money-friendly niches. FA has all five; EN mirrors them
+# (religious stories -> Moral/History storytelling, high CPM + safe).
+LONG_ALLOWED_FA = [
+    "طنز روزمره",
+    "روانشناسی و رفتار انسان",
+    "هوش مصنوعی و تکنولوژی",
+    "ایران و تاریخ ایران",
+    "داستان‌های مذهبی",
+]
+LONG_ALLOWED_EN = [
+    "Entertainment",
+    "Psychology",
+    "Technology",
+    "History",
+    "Dark History",
+]
+
 FA_NICHES = [
     "ایران و تاریخ ایران",
     "حقایق عجیب ایران",
@@ -88,6 +106,8 @@ FA_NICHES = [
     "کسب‌وکار و درآمد اینترنتی",
     "مقایسه ایران با جهان",
     "ایران‌شناسی و مناطق ناشناخته",
+    # Owner directive 2026-10-04: long-form also uses religious storytelling.
+    "داستان‌های مذهبی",
 ]
 
 # Niches that already have a published topic (topic id -> niche) - used to avoid repeats.

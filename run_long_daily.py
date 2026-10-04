@@ -95,7 +95,7 @@ def _top_up(targets, state):
     wanted = [l for l in ("en", "fa") if l not in have][:PER_DAY - len(targets)]
     for lang in wanted:
         try:
-            targets.append(gen_topics.build_topic(lang))
+            targets.append(gen_topics.build_topic(lang, kind="long"))
         except Exception as e:
             print(f"[long] could not generate a {lang} topic ({e})")
     return targets
@@ -162,7 +162,7 @@ def main(argv=None):
                 ready = [t for t in gen_topics.load_generated()
                          if t.get("lang") == lang and t["id"] not in state["posted"]]
                 if len(ready) < 2:
-                    gen_topics.build_topic(lang)
+                    gen_topics.build_topic(lang, kind="long")
         except Exception as e:
             print(f"[long] topic pre-build skipped ({e})")
     return 0
