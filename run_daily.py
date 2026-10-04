@@ -183,6 +183,11 @@ def _niche_allowed(item, lang):
 
 def main():
     dry_run = os.environ.get("VIRAL_DRY_RUN") == "1"
+    # Manual mode (owner directive 2026-10-04): render a mined Short but do NOT
+    # upload - the MP4 is kept under short_out/ and shipped to the user as a
+    # workflow artifact for manual upload in YouTube Studio. Bypasses the API
+    # upload quota (uploadLimitExceeded only blocks the API, not Studio).
+    manual_mode = (os.environ.get("TEST_ONLY") or "0") == "1"
     ensure_auth()
     posted_records = load_posted()
 
@@ -294,6 +299,23 @@ def main():
             rendered_path = pipeline.mix_bg_music(rendered_path, lang=candidate.get("lang", ""), track=track)
     except Exception as e:
         print(f"[music] auto-mix skipped ({e})")
+
+    if manual_mode:
+        # Manual upload path: copy the finished MP4 to short_out/ and stop
+        # before the API call - the artifact step ships it to the user.
+        import shutil
+        os.makedirs(os.path.join(BASE_DIR, "short_out"), exist_ok=True)
+        manual_path = os.path.join(BASE_DIR, "short_out", f"short_{candidate['id']}.mp4")
+        shutil.copyfile(rendered_path, manual_path)
+        meta_path = os.path.join(BASE_DIR, "short_out", "upload_meta.txt")
+        with open(meta_path, "w", encoding="utf-8") as f:
+            f.write(f"TITLE: {candidate['title']}\n\nDESCRIPTION:\n{candidate['description']}\n\nTAGS:\n{','.join(candidate.get('tags', []))}\n")
+        print("=========================================")
+        print("MANUAL SHORT READY (no API upload).")
+        print("MP4:", manual_path)
+        print("Meta:", meta_path)
+        print("=========================================")
+        return
 
     print("Uploading to YouTube channel @padiz...")
     short_url = pipeline.upload_to_youtube(

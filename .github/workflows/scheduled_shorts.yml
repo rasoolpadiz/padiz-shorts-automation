@@ -112,8 +112,18 @@ jobs:
           # FORCE_LANG: fa | en | empty (empty = slot->lang forcing by UTC hour)
           FORCE_LANG: ${{ inputs.force_lang || '' }}
           FORCE_UPLOAD: ${{ inputs.force_upload && '1' || '0' }}
+          TEST_ONLY: ${{ inputs.test_only && '1' || '0' }}
         run: |
           python run_daily.py
+
+      - name: Upload rendered Short (manual mode)
+        if: inputs.test_only == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: manual-short
+          path: short_out/*.mp4
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Commit and push updated state
         if: always()
