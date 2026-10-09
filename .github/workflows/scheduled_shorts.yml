@@ -93,14 +93,15 @@ jobs:
           # one topic per language. Without this the run finds an empty pool and
           # publishes nothing.
           want = 2 if need_topup else 1
+          # Owner directive 2026-10-09: FA-ONLY. English generation is retired, so
+          # mining only needs one language - the EN top-up call is removed entirely.
           if need_topup or gap is None or gap >= RD.MIN_GAP_MINUTES:
               import gen_shorts as GS
-              for lang in ("fa", "en"):
-                  try:
-                      made = GS.top_up(lang, want)
-                      print(f"[shorts] {lang}: {len(made)} new")
-                  except Exception as e:
-                      print(f"[shorts] {lang} top-up failed: {e}")
+              try:
+                  made = GS.top_up("fa", want)
+                  print(f"[shorts] fa: {len(made)} new")
+              except Exception as e:
+                  print(f"[shorts] fa top-up failed: {e}")
           else:
               print(f"[shorts] last upload {gap:.0f}m ago - writer skipped")
           PY

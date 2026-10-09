@@ -399,6 +399,13 @@ def build_short(lang, niche=None, discovery=None, api_key=None, dry_run=False):
     api_key = (api_key or os.environ.get("GEMINI_API_KEY") or "").strip()
     covered = _covered_titles()
 
+    # OWNER DIRECTIVE 2026-10-09 (final): the channel is Persian-only. Any attempt
+    # to build, mine, or trigger an English draft is rejected here - so no EN Short
+    # can ever reach run_daily.py, the uploads playlist, or the API.
+    if lang == "en":
+        _log(f"[genshorts] LANG=en blocked - Persian-only channel, refusing {niche!r}")
+        return None
+
     if discovery is None:
         try:
             import discover as D
@@ -465,26 +472,24 @@ def build_short(lang, niche=None, discovery=None, api_key=None, dry_run=False):
 
     data = None
     gem_key = (api_key or "").strip()
-    gem_title = str((discovery or {}).get("title") or "") if isinstance(discovery, dict) else ""
-    if gem_key and (gem_title or source_text):
-        prompt = _prompt(lang, niche, discovery, source_text=source_text)
-        # Two attempts: a draft that misses one rule (usually a slide a couple of
-        # words short) is worth one retry with the reason attached rather than
-        # falling straight to the template.
-        for attempt in (1, 2):
-            data = _extract_json(_call_gemini(prompt, gem_key))
-            reason = _reject_reason(data, lang) if data else "no JSON returned"
-            if not reason:
-                break
-            _log(f"[genshorts] draft rejected ({reason})"
-                 + ("" if attempt == 2 else " - retrying once"))
-            if attempt == 2:
-                data = None
-            else:
-                prompt += (
-                    "\n\nIMPORTANT - your previous attempt was REJECTED because: "
-                    + reason + ". Fix exactly that and return the corrected JSON only."
-                )
+    prompt = _prompt(lang, niche, discovery, source_text=source_text)
+    # Two attempts: a draft that misses one rule (usually a slide a couple of
+    # words short) is worth one retry with the reason attached rather than
+    # falling straight to the template.
+    for attempt in (1, 2):
+        data = _extract_json(_call_gemini(prompt, gem_key))
+        reason = _reject_reason(data, lang) if data else "no JSON returned"
+        if not reason:
+            break
+        _log(f"[genshorts] draft rejected ({reason})"
+             + ("" if attempt == 2 else " - retrying once"))
+        if attempt == 2:
+            data = None
+        else:
+            prompt += (
+                "\n\nIMPORTANT - your previous attempt was REJECTED because: "
+                + reason + ". Fix exactly that and return the corrected JSON only."
+            )
 
     if data is None:
         # Owner directive 2026-10-03: the hand-written template is BANNED. Writing
@@ -510,6 +515,12 @@ def top_up(lang, count):
     channel's approved list) and content_mine pulls the text - the old
     discovery_pool title is only a fallback when mining is off.
     """
+    # Owner directive 2026-10-09 (final): Persian-only channel. No EN draft is
+    # ever produced, so the EN half of the workflow can never publish again.
+    if lang == "en":
+        _log("[genshorts] top_up(lang='en') blocked - Persian-only channel")
+        return []
+
     # Only PUBLISHABLE drafts count toward the target. Old drafts written before
     # mining was wired up carry no mined_from, and run_daily refuses those - so
     # counting them made top_up report "0 new" on an empty, unpublishable stock.
