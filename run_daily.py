@@ -37,10 +37,10 @@ FORCE_UPLOAD = (os.environ.get("FORCE_UPLOAD") or "0") == "1"
 MAX_SHORTS_PER_DAY = 3
 
 # Slot -> language forcing (peak-audience schedule, Tehran = UTC+3:30).
-# FA wins Iran peaks: 13:30 lunch + 20:30 evening (UTC 10, 17).
-# EN wins US/EU peaks: 17:30 Tehran = EU lunch / US morning (UTC 14).
-FA_SLOT_HOURS_UTC = {10, 17}
-EN_SLOT_HOURS_UTC = {14}
+# Owner directive 2026-10-09: FA-ONLY channel. Every slot renders Persian;
+# the EN slot (17:30 Tehran) now publishes a second FA Short for that window.
+FA_SLOT_HOURS_UTC = {10, 14, 17}
+EN_SLOT_HOURS_UTC = set()
 
 
 def lang_for_utc_hour(h):
@@ -258,16 +258,24 @@ def main():
     if _posted_today_count(posted_records) >= MAX_SHORTS_PER_DAY and not (FORCE_UPLOAD and not dry_run):
         print(f"Daily cap reached ({MAX_SHORTS_PER_DAY}/day) - safe exit.")
         return
+    # Owner directive 2026-10-09: FA-ONLY. An explicit en override is ignored
+    # (legacy callers); everything renders Persian.
     force_lang = (os.environ.get("FORCE_LANG") or "").strip().lower()
+    if force_lang == "en":
+        print("FORCE_LANG=en ignored (FA-only channel) - rendering Persian.")
+        force_lang = "fa"
     slot_lang = lang_for_utc_hour(datetime.now(timezone.utc).hour)
-    if force_lang in ("fa", "en"):
-        is_en_turn = (force_lang == "en")
-        print(f"FORCE_LANG override: {force_lang}")
-    elif slot_lang in ("fa", "en"):
-        is_en_turn = (slot_lang == "en")
+    if force_lang == "fa":
+        is_en_turn = False
+        print("FORCE_LANG override: fa")
+    elif slot_lang == "fa":
+        is_en_turn = False
         print(f"Slot forcing: UTC hour -> {slot_lang}")
+    elif slot_lang == "en":
+        is_en_turn = False
+        print(f"Slot forcing: UTC hour -> en (legacy) - rendering FA instead")
     else:
-        is_en_turn = (total_posted % 2 == 1)
+        is_en_turn = False
     if is_en_turn and not HAS_EN:
         print("English pool missing - falling back to Persian pool.")
         is_en_turn = False

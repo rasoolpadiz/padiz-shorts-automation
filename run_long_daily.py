@@ -63,41 +63,33 @@ def _last_posted_lang(state):
 
 
 def pick_topics(topics, state):
-    """Alternate EN/FA day by day and never repeat a published topic.
+    """FA-ONLY (owner directive 2026-10-09): pick an unposted Persian topic.
 
-    Alternation keys off the LAST PUBLISHED LANGUAGE rather than an arbitrary
-    count, so a failed or retried run can never flip the order twice.
+    Alternation is gone - the last-published language no longer matters.
+    Failed or retried runs can never resurrect an English pick.
     """
     today = date.today().isoformat()
-    last = _last_posted_lang(state)
-    order = ["fa", "en"] if last == "en" else ["en", "fa"]
     posted = state.get("posted", {})
-    picked = []
-    for lang in order:
-        pool = [t for t in topics if t.get("lang") == lang]
-        # The owner asked for zero repeats, so anything already published is out -
-        # if the pool runs dry the writer supplies a new topic instead.
-        fresh = [t for t in pool
-                 if t["id"] not in posted and posted.get(t["id"]) != today]
-        if not fresh:
-            continue
-        fresh.sort(key=lambda t: state.get("counts", {}).get(t["id"], 0))
-        picked.append(fresh[0])
-        if len(picked) >= PER_DAY:
-            break
-    return picked
+    pool = [t for t in topics if t.get("lang") == "fa"]
+    # The owner asked for zero repeats, so anything already published is out -
+    # if the pool runs dry the writer supplies a new topic instead.
+    fresh = [t for t in pool
+             if t["id"] not in posted and posted.get(t["id"]) != today]
+    if not fresh:
+        return []
+    fresh.sort(key=lambda t: state.get("counts", {}).get(t["id"], 0))
+    return fresh[:PER_DAY]
 
 
 def _top_up(targets, state):
-    """If no ready topic is left for a language, write a fresh one from a niche."""
+    """If no ready FA topic is left, write a fresh one from a niche (FA only)."""
     import gen_topics
-    have = {t.get("lang") for t in targets}
-    wanted = [l for l in ("en", "fa") if l not in have][:PER_DAY - len(targets)]
-    for lang in wanted:
-        try:
-            targets.append(gen_topics.build_topic(lang, kind="long"))
-        except Exception as e:
-            print(f"[long] could not generate a {lang} topic ({e})")
+    if len(targets) >= PER_DAY:
+        return targets
+    try:
+        targets.append(gen_topics.build_topic("fa", kind="long"))
+    except Exception as e:
+        print(f"[long] could not generate a fa topic ({e})")
     return targets
 
 
@@ -154,15 +146,14 @@ def main(argv=None):
             state["counts"][topic["id"]] = state.get("counts", {}).get(topic["id"], 0) + 1
             _save_state(state)
 
-    # Keep a buffer of unused topics so tomorrow never has to wait on the writer.
+    # Keep a buffer of unused FA topics so tomorrow never has to wait on the writer.
     if "--upload" in argv and not "--no-prep" in argv:
         try:
             import gen_topics
-            for lang in ("en", "fa"):
-                ready = [t for t in gen_topics.load_generated()
-                         if t.get("lang") == lang and t["id"] not in state["posted"]]
-                if len(ready) < 2:
-                    gen_topics.build_topic(lang, kind="long")
+            ready = [t for t in gen_topics.load_generated()
+                     if t.get("lang") == "fa" and t["id"] not in state["posted"]]
+            if len(ready) < 2:
+                gen_topics.build_topic("fa", kind="long")
         except Exception as e:
             print(f"[long] topic pre-build skipped ({e})")
     return 0

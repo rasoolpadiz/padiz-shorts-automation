@@ -2,10 +2,10 @@ name: Padiz 24/7 Shorts Automation
 
 on:
   schedule:
-    # 3 Shorts/day (owner directive 2026-10-03, lowered from 5 after YouTube
-    # returned uploadLimitExceeded). Tehran = UTC+3:30:
+    # 3 FA Shorts/day (owner directive 2026-10-09: FA-ONLY channel, was 5 mixed).
+    # Tehran = UTC+3:30:
     # 10:00 UTC = 13:30 Tehran -> FA (Iran lunch peak)
-    # 14:00 UTC = 17:30 Tehran -> EN (EU lunch / US morning)
+    # 14:00 UTC = 17:30 Tehran -> FA (second FA window, was EN)
     # 17:00 UTC = 20:30 Tehran -> FA (Iran evening prime)
     - cron: '0 10,14,17 * * *'
     # Catch-up slots, +2h after each primary. GitHub's cron is best-effort and
