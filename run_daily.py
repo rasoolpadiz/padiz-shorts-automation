@@ -358,5 +358,16 @@ def main():
         except Exception:
             pass
 
+    # Owner directive 2026-10-09: never archive renders on the server. After a
+    # SUCCESSFUL upload, wipe temp_render/short_out and any leftover mp4 so the
+    # disk never fills up. State (posted_shorts.json) is preserved by the cleaner.
+    # Skipped in dry-run/manual mode (those intentionally keep the MP4 for review).
+    try:
+        if os.environ.get("PADIZ_KEEP_ARTIFACTS", "0") != "1":
+            import cleanup_artifacts
+            cleanup_artifacts.main()
+    except Exception as e:
+        print(f"[cleanup] skipped ({e})")
+
 if __name__ == "__main__":
     main()

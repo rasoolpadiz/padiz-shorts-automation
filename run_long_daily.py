@@ -156,6 +156,16 @@ def main(argv=None):
                 gen_topics.build_topic("fa", kind="long")
         except Exception as e:
             print(f"[long] topic pre-build skipped ({e})")
+
+    # Owner directive 2026-10-09: after a successful upload, free the disk - never
+    # archive the rendered mp4 / scene folder on the server. posted_long.json (the
+    # state) is preserved by the cleaner. Skipped when explicitly told to keep.
+    if "--upload" in argv and os.environ.get("PADIZ_KEEP_ARTIFACTS", "0") != "1":
+        try:
+            import cleanup_artifacts
+            cleanup_artifacts.main()
+        except Exception as e:
+            print(f"[cleanup] skipped ({e})")
     return 0
 
 
