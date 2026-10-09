@@ -1,17 +1,15 @@
 name: Padiz Daily Long-Form Video
 
 on:
-  schedule:
-    # Primary slot: 12:00 UTC = 15:30 Tehran (best for both monetization + discovery).
-    # GitHub's cron is best-effort and has already misfired here - on
-    # 2026-09-30 it ran 5h49m late and on 2026-10-01 it was skipped entirely.
-    # So the workflow also fires catch-up slots; run_long_daily.py publishes at
-    # most ONE long video per day, so a late duplicate is a harmless no-op.
-    - cron: '0 12 * * *'    # 15:30 Tehran (primary)
-    - cron: '30 13 * * *'   # 17:00 Tehran (catch-up 1)
-    - cron: '0 15 * * *'    # 18:30 Tehran (catch-up 2)
-    - cron: '30 16 * * *'   # 20:00 Tehran (catch-up 3)
-    - cron: '0 18 * * *'    # 21:30 Tehran (catch-up 4)
+  # OWNER DIRECTIVE 2026-10-09: the server is now the PRIMARY publisher (cron at
+  # 08:00 EDT = 15:30 Tehran, one long/day). GitHub schedule DISABLED to avoid
+  # double uploads and double Gemini quota spend. Manual runs still work.
+  # schedule:
+  #   - cron: '0 12 * * *'
+  #   - cron: '30 13 * * *'
+  #   - cron: '0 15 * * *'
+  #   - cron: '30 16 * * *'
+  #   - cron: '0 18 * * *'
   workflow_dispatch:
     inputs:
       topic:
