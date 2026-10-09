@@ -8,8 +8,8 @@ fresh material and never repeats a topic.
 Design rules baked into the prompt (DESIGN_SPEC.md):
   * scene 1 is a 0-15s cold open: pattern interrupt -> beat -> promise
   * every 3-4 scenes there is a curiosity gap or a list promise
-  * scenes breathe: 14 scenes x ~90-100 words of narration = ~8-10 minutes
-    (at ~150wpm, 8-10 min = 1200-1500 words, so 14 x ~95 = ~1330 words)
+  * scenes breathe: 14 scenes x ~90-100 words of narration = ~8-9 minutes
+    (at ~150wpm, 8-9 min = 1200-1350 words, so 14 x ~90-95 = ~1260-1330 words)
   * Persian narration is written for the ear, not for the page
 """
 import json
@@ -26,10 +26,14 @@ GEN_DIR = os.path.join(HERE, "topics_generated")
 USED_NICHES = os.path.join(GEN_DIR, "used_niches.json")
 
 SCENES = 14
-# Target words per scene when the writer is generating. At ~150wpm an 8-10 min
-# video needs 1200-1500 words, so 14 scenes x ~90-100 words = ~1260-1400 words.
+# Target words per scene when the writer is generating. Owner directive 2026-10-10:
+# the daily long-form must land at 8-9 minutes. At ~150wpm, 9 min = 1350 words,
+# so 14 scenes x ~90-100 words = ~1260-1400 words (~8-9 min). The prompt caps each
+# scene at ~96-100 words so a long scene cannot push the video past 9 minutes.
 WORDS_PER_SCENE = {"en": 95, "fa": 90}
-MAX_WORDS_PER_SCENE = {"en": 160, "fa": 150}
+# Rejection cap: a scene well above the ~96-100 target would inflate the runtime
+# past 9 min, so anything beyond ~115-120 words/scene is treated as a bad draft.
+MAX_WORDS_PER_SCENE = {"en": 120, "fa": 115}
 
 HOOK_EN = """\
 OPEN with a cold open that wins the first 15 seconds:
@@ -317,9 +321,9 @@ def _prompt(lang, niche):
     hook = HOOK_EN if lang == "en" else HOOK_FA
     if lang == "en":
         shape = f"""Write a long-form video script in NATIVE, CONVERSATIONAL English.
-Exactly {SCENES} scenes. Each scene's "speech" must be {w}-110 words when spoken
-comfortably - that is what gets the video to 8-10 minutes
-(14 scenes x ~95 words = ~1330 words = ~8.9 min at 150wpm).
+Exactly {SCENES} scenes. Each scene's "speech" must be {w}-100 words when spoken
+comfortably - that is what gets the video to 8-9 minutes
+(14 scenes x ~95 words = ~1330 words = ~8.9 min at 150wpm; 100 words/scene caps it near 9 min).
 
 Scene roles must follow this retention shape:
   1  cold open (see below) - the most important scene
@@ -345,8 +349,8 @@ Writing rules:
   Never a diagram, chart, map, scan, document, newspaper or infographic."""
     else:
         shape = f"""یک متن ویدیوی بلند به زبان فارسی طبیعی و محاوره‌ای بنویس.
-دقیقاً {SCENES} صحنه. هر صحنه «speech» باید {w} تا ۱۱۰ کلمه باشد تا گفتار طبیعی به
-۸ تا ۱۰ دقیقه برسد (۱۴ صحنه × ~۹۰ کلمه = ~۱۲۶۰ کلمه) - همین متن‌ها خوانده می‌شوند، پس برای گوش نوشته شود.
+دقیقاً {SCENES} صحنه. هر صحنه «speech» باید {w} تا ۹۶ کلمه باشد تا گفتار طبیعی به
+۸ تا ۹ دقیقه برسد (۱۴ صحنه × ~۹۰ کلمه = ~۱۲۶۰ کلمه ≈ ۸٫۴ دقیقه در ۱۵۰ واژه/دقیقه؛ سقف ۹۶ کلمه جلوی ردشدن از ۹ دقیقه را می‌گیرد) - همین متن‌ها خوانده می‌شوند، پس برای گوش نوشته شود.
 
 ساختار نگهدارندهٔ توجه:
   ۱  شروع سرد (پایین) - مهم‌ترین صحنه
@@ -398,8 +402,9 @@ def _call_gemini(prompt, api_key):
     from google import genai
     from google.genai import types as genai_types
     client = genai.Client(api_key=api_key)
-    # Verified live 2026-10-09: gemini-3.8-flash OK, 2.5-flash OK, 2.0-flash DEAD(404).
-    for model in ("gemini-3.8-flash", "gemini-2.5-flash"):
+    # Verified live 2026-10-09 with the owner's key: gemini-3.8-flash OK.
+    # gemini-2.5-flash / 2.0-flash are DEAD (404) for new keys - removed.
+    for model in ("gemini-3.8-flash", "gemini-flash-latest"):
         try:
             r = client.models.generate_content(
                 model=model,

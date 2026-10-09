@@ -144,11 +144,10 @@ def _call_gemini(prompt, api_key):
     body = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode()
     last_err = ""
     # Models verified live against GET /v1beta/models on 2026-10-09 with this key:
-    # gemini-3.8-flash returned HTTP 200 (generateContent). The old comment
-    # claiming it 404s was WRONG and silently demoted every Short to the weaker
-    # gemini-2.5-flash. Newest+fastest first, then stable fallbacks.
-    for model in ("gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash",
-                  "gemini-flash-latest", "gemini-2.5-flash"):
+    # gemini-3.8-flash returned HTTP 200 (generateContent). gemini-2.5-flash /
+    # 2.0-flash return 404 for new keys, so they are dropped from the fallbacks.
+    # Newest+fastest first, then the stable alias.
+    for model in ("gemini-3.8-flash", "gemini-flash-latest"):
         url = ("https://generativelanguage.googleapis.com/v1beta/models/"
                f"{model}:generateContent?key=" + api_key)
         req = urllib.request.Request(url, data=body,
@@ -341,12 +340,15 @@ def _words(text):
 
 
 def _speech_range(lang, slides=1):
-    """Words for the single-slide narration, targeting a 40-70 second Short.
+    """Words for the single-slide narration, targeting a ~40-50 second Short.
 
     The video length follows the audio automatically (pipeline.render derives
-    each clip's duration from its TTS audio), so the range IS the runtime.
+    each clip's duration from its TTS audio), so the word range IS the runtime.
+    Owner directive 2026-10-09: keep Shorts meaningful (~40-50s), not ultra-short.
+    A naturally shorter story is fine - the wmin floor has a -10 tolerance and is
+    not forced, so we never pad with filler just to hit a number.
     """
-    return (60, 110) if lang == "fa" else (60, 115)
+    return (58, 82) if lang == "fa" else (58, 88)
 
 
 def _covered_titles():

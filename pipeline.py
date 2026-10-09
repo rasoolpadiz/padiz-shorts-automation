@@ -484,8 +484,10 @@ GEMINI_TTS_MODELS = [
 
 GEMINI_CONTENT_MODELS = [
     os.environ.get("GEMINI_CONTENT_MODEL", "").strip(),
-    "gemini-3.8-flash",                 # verified OK 2026-10-09 (200)
-    "gemini-2.5-flash",                 # verified OK (stable fallback)
+    "gemini-3.8-flash",                 # verified OK 2026-10-09 (200) - PRIMARY
+    "gemini-flash-latest",              # stable alias, always current
+    # NOTE: gemini-2.5-flash / gemini-2.0-flash return 404 for new API keys
+    # ("no longer available to new users"), so they are NOT listed as fallbacks.
 ]
 
 # Male voice for Farid-style slides, female voice for Dilara-style slides.
