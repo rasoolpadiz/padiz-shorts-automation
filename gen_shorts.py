@@ -143,13 +143,12 @@ def _call_gemini(prompt, api_key):
     import urllib.request
     body = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode()
     last_err = ""
-    # Only names verified to exist on the live API (2026-10). gemini-3.8-flash
-    # is NOT a real text model - it 404s - which silently pushed every Short
-    # onto the meaningless template. Verify with:
-    #   GET /v1beta/models?key=... and read the "name" fields.
-    for model in ("gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash",
-                  "gemini-3-flash-preview", "gemini-flash-latest",
-                  "gemini-2.5-flash"):
+    # Models verified live against GET /v1beta/models on 2026-10-09 with this key:
+    # gemini-3.8-flash returned HTTP 200 (generateContent). The old comment
+    # claiming it 404s was WRONG and silently demoted every Short to the weaker
+    # gemini-2.5-flash. Newest+fastest first, then stable fallbacks.
+    for model in ("gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash",
+                  "gemini-flash-latest", "gemini-2.5-flash"):
         url = ("https://generativelanguage.googleapis.com/v1beta/models/"
                f"{model}:generateContent?key=" + api_key)
         req = urllib.request.Request(url, data=body,

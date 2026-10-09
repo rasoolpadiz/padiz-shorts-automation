@@ -473,18 +473,19 @@ GEMINI_STYLE_EN = (
 #
 # For non-TTS (script generation), use the latest available models that support
 # content generation. Older models are deprecated, so we try newest first.
+# Verified live 2026-10-09 (GET /v1beta/models + generateContent/TTS probes):
+# TTS OK: gemini-2.5-flash-preview-tts (127KB), gemini-3.8-flash-tts present.
+# gemini-2.0-flash is DEAD (404) and is removed from both lists.
 GEMINI_TTS_MODELS = [
     os.environ.get("GEMINI_TTS_MODEL", "").strip(),
-    "gemini-3.8-flash-tts",             # newest free-tier TTS, best fidelity (can overload)
-    "gemini-2.5-flash-preview-tts",     # stable free-tier TTS
-    "gemini-2.0-flash",                 # general model with AUDIO modality
+    "gemini-3.8-flash-tts",             # newest free-tier TTS, best fidelity
+    "gemini-2.5-flash-preview-tts",     # stable free-tier TTS (verified OK)
 ]
 
 GEMINI_CONTENT_MODELS = [
     os.environ.get("GEMINI_CONTENT_MODEL", "").strip(),
-    "gemini-3.8-flash",                 # newest high-speed model
-    "gemini-2.5-flash-preview",         # stable preview
-    "gemini-2.0-flash",                 # stable general model
+    "gemini-3.8-flash",                 # verified OK 2026-10-09 (200)
+    "gemini-2.5-flash",                 # verified OK (stable fallback)
 ]
 
 # Male voice for Farid-style slides, female voice for Dilara-style slides.

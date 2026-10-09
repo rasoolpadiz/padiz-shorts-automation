@@ -398,8 +398,8 @@ def _call_gemini(prompt, api_key):
     from google import genai
     from google.genai import types as genai_types
     client = genai.Client(api_key=api_key)
-    # Use the latest models first - older models are deprecated
-    for model in ("gemini-3.8-flash", "gemini-2.5-flash-preview", "gemini-2.0-flash"):
+    # Verified live 2026-10-09: gemini-3.8-flash OK, 2.5-flash OK, 2.0-flash DEAD(404).
+    for model in ("gemini-3.8-flash", "gemini-2.5-flash"):
         try:
             r = client.models.generate_content(
                 model=model,
