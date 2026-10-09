@@ -651,15 +651,34 @@ def _already_mined(niche):
 
 
 def _build_from_repo_niche(lang):
-    """Pick an approved niche from the repo and mine its best online text."""
-    for niche in _repo_niche_queue(lang):
-        if _already_mined(niche):
-            continue
-        item = build_short(lang, niche=niche)
-        if item:
-            return item
-        _log(f"[genshorts] {niche!r} produced nothing - trying next niche")
-    return None
+    """Pick an approved niche from the repo and mine its best online text.
+
+    Pass 1 prefers niches never mined before; pass 2 re-allows previously mined
+    niches. Without pass 2 the pipeline STARVED: after ~6 generated topics every
+    queue niche was flagged "_already_mined" and top_up returned 0 drafts
+    forever (silently), which is what stalled the channel on 2026-10-09. A fresh
+    story from a known niche beats publishing nothing.
+    """
+    queue = list(_repo_niche_queue(lang))
+    if not queue:
+        _log("[genshorts] niche queue is empty (topics_niches missing?)")
+        return None
+
+    def attempt(allow_used):
+        for niche in queue:
+            if not allow_used and _already_mined(niche):
+                continue
+            item = build_short(lang, niche=niche)
+            if item:
+                return item
+            _log(f"[genshorts] {niche!r} produced nothing - trying next niche")
+        return None
+
+    item = attempt(allow_used=False)
+    if item is None:
+        _log("[genshorts] every fresh niche failed - retrying with known niches")
+        item = attempt(allow_used=True)
+    return item
 
 
 def mark_posted(topic_id):
