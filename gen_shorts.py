@@ -542,9 +542,14 @@ def top_up(lang, count):
     # Only PUBLISHABLE drafts count toward the target. Old drafts written before
     # mining was wired up carry no mined_from, and run_daily refuses those - so
     # counting them made top_up report "0 new" on an empty, unpublishable stock.
+    # Drafts whose topic_id is already in posted_shorts.json are refused by
+    # run_daily too (ID collision guard), so they must not count as stock -
+    # otherwise the pipeline stalls forever behind a phantom draft.
+    posted_ids = _posted_ids()
     existing = [t for t in load_generated()
                 if t.get("lang") == lang and not t.get("posted")
-                and not t.get("fallback") and (t.get("mined") or t.get("mined_from"))]
+                and not t.get("fallback") and (t.get("mined") or t.get("mined_from"))
+                and t.get("id") not in posted_ids]
     if len(existing) < count:
         _log(f"[genshorts] {lang}: {len(existing)} publishable draft(s), "
              f"need {count - len(existing)} more")
