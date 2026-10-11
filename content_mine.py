@@ -153,9 +153,9 @@ def search_news(query, lang="fa", n=4):
     import urllib.parse
     lang_prefix = "fa" if lang == "fa" else "en"
     url = ("https://news.google.com/rss/search?q="
-           + urllib.parse.quote(query) + f"&hl={lang_prefix}&gl="
+           + urllib.parse.quote(query) + "&hl=" + lang_prefix + "&gl="
            + ("IR" if lang == "fa" else "US") + "&ceid="
-           + (":IR" if lang == "fa" else ":US"))
+           + ("IR" if lang == "fa" else "US") + ":" + lang_prefix)
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=20) as r:
@@ -231,6 +231,17 @@ def search_wikiquote(query, lang="fa"):
     return None
 
 
+def _norm_word(s):
+    """Fold ZWNJ/Arabic variants so 'روان‌شناسی' == 'روانشناسی'.
+
+    Without this the relevance guard rejected every hit whose title used the
+    correct ZWNJ spelling while the niche label did not (verified live: the
+    'روان‌شناسی' article was rejected for the 'روانشناسی' term).
+    """
+    s = str(s).replace("\u200c", "").replace("\u200f", "").replace("\u200e", "")
+    return s.replace("ي", "ی").replace("ك", "ک").lower()
+
+
 def search_wikipedia(query, lang="fa"):
     """Wikipedia article text - free, no key, effectively unlimited.
 
@@ -278,8 +289,10 @@ def search_wikipedia(query, lang="fa"):
             # Relevance guard: a Wikipedia article only counts if its own title
             # shares a meaningful word with what we searched for. Without this,
             # "طنز" matched an unrelated 182-word page and produced nonsense.
-            ht = set(str(h.get("title", "")).split())
-            if not (ht & set(term.split())):
+            # ZWNJ folding is required: titles spell "روان‌شناسی" with ZWNJ while
+            # niche labels usually spell "روانشناسی" without it.
+            ht = set(_norm_word(w) for w in str(h.get("title", "")).split())
+            if not (ht & set(_norm_word(w) for w in term.split())):
                 continue
             data = _get("action=query&prop=extracts&explaintext=1&redirects=1"
                         "&format=json&exlimit=1&titles=" + urllib.parse.quote(h["title"]))
@@ -417,6 +430,10 @@ def mine(niche, lang="fa", extra=""):
         _log(f"[mine] youtube search failed ({type(e).__name__}: {str(e)[:120]})")
     try:
         news = search_news(query, lang)
+        if not news:
+            # Google News ANDs every word, so the long hinted query often returns
+            # 0 items while the plain niche label returns plenty (verified live).
+            news = search_news(str(niche).strip(), lang)
         _log(f"[mine] news: {len(news)} articles")
     except Exception as e:
         _log(f"[mine] news search failed ({e})")

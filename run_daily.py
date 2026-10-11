@@ -284,6 +284,15 @@ def main():
         print("EN turn: rendering self-made English Short (viral downloader retired)...")
         candidate = pick_from(FACTS_POOL_EN, posted_records)
     else:
+        # Drafts are CREATED here (owner directive 2026-10-03): top_up mines the
+        # web + lets Gemini rewrite, pick_from only publishes. Without this call
+        # the pool stays empty and every cron run exits with "nothing to publish".
+        try:
+            import gen_shorts as _GS
+            made = _GS.top_up("fa", 1)
+            print(f"[shorts] top_up: {len(made)} fresh mined draft(s)")
+        except Exception as e:
+            print(f"[shorts] top_up failed ({type(e).__name__}: {str(e)[:120]})")
         print("FA turn: rendering Persian Short...")
         candidate = pick_from(FACTS_POOL, posted_records)
 

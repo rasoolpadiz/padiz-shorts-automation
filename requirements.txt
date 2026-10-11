@@ -1,5 +1,7 @@
 edge-tts>=6.1.12
-numpy>=1.26.0
+# Pinned: the server CPU lacks X86_V2 and numpy>=1.26 wheels are built for it
+# (RuntimeError at import). 1.24.x is the last baseline build - verified working.
+numpy==1.24.4
 pillow>=10.0.0
 arabic-reshaper>=3.0.0
 python-bidi>=0.4.2
