@@ -369,6 +369,24 @@ def _covered_titles():
     return titles
 
 
+def _posted_ids():
+    """Dynamic topic IDs already published (run_daily.posted_shorts.json).
+
+    A repeat of a published topic would collide with its topic_id, overwrite
+    its file, and be filtered again by run_daily - so check here too.
+    """
+    ids = set()
+    for f in ("posted_shorts.json", ".posted_shorts.json"):
+        try:
+            with open(os.path.join(BASE_DIR, f), encoding="utf-8") as fh:
+                for r in json.load(fh):
+                    if isinstance(r, dict) and r.get("id"):
+                        ids.add(r["id"])
+        except Exception:
+            pass
+    return ids
+
+
 def load_generated():
     """Dynamic Shorts currently on disk, oldest first."""
     if not os.path.isdir(GEN_DIR):
@@ -466,8 +484,8 @@ def build_short(lang, niche=None, discovery=None, api_key=None, dry_run=False):
 
     suffix = _slug(discovery.get("title", ""))[:22] or (_slug(source_text)[:22] or "story")
     topic_id = f"{lang}_auto_{_slug(niche)[:20]}_{suffix}"
-    if topic_id in covered:
-        _log("[genshorts] this story is already covered - skipping")
+    if topic_id in covered or topic_id in _posted_ids():
+        _log("[genshorts] this topic already published - skipping")
         return None
 
     data = None
