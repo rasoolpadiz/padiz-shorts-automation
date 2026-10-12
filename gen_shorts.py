@@ -25,6 +25,11 @@ GEN_DIR = os.path.join(BASE_DIR, "shorts_generated")
 
 MAX_FRESH_PER_RUN = int(os.environ.get("SHORTS_MAX_FRESH", "2"))
 
+# How much a live trending story is worth when ranking niches (see
+# _repo_niche_queue). Analytics scores run ~0-12 and trend scores ~0-1.2, so the
+# weight puts a hot niche roughly on par with a historically strong one.
+TREND_WEIGHT = float(os.environ.get("SHORTS_TREND_WEIGHT", "5.0"))
+
 # Mining (owner directive 2026-10-03): pull the top-performing text online for
 # the niche and use it as the source of the Short. ON by default; set
 # PADIZ_MINE=0 to go back to pure discovery titles.
@@ -473,20 +478,27 @@ def build_short(lang, niche=None, discovery=None, api_key=None, dry_run=False):
         return None
 
     if discovery is None:
-        try:
-            import discover as D
-            if niche is None:
-                niche = D.niches_to_probe(lang, 1)[0]
-            # Walk the ranked pool and take the first story NOT yet covered;
-            # otherwise one already-made top item blocks every future Short.
-            pool = (D._json_load(D.POOL_PATH, {}).get(lang) or {}).get("items", [])
-            discovery = next(
-                (it for it in pool
-                 if _slug(it.get("title", "")) not in covered), None)
-            discovery = discovery or D.best_for(lang) or {}
-        except Exception as e:
-            _log(f"[genshorts] discovery unavailable ({e})")
-            discovery = {}
+        discovery = {}
+        # 1) PREFERRED: a story that is trending RIGHT NOW inside this niche,
+        # ranked by outlier score (real demand, low saturation).
+        if niche:
+            discovery = _trend_pick(niche, lang) or {}
+        # 2) Fallback: the legacy discovery pool, then its best item.
+        if not discovery:
+            try:
+                import discover as D
+                if niche is None:
+                    niche = D.niches_to_probe(lang, 1)[0]
+                # Walk the ranked pool and take the first story NOT yet covered;
+                # otherwise one already-made top item blocks every future Short.
+                pool = (D._json_load(D.POOL_PATH, {}).get(lang) or {}).get("items", [])
+                discovery = next(
+                    (it for it in pool
+                     if _slug(it.get("title", "")) not in covered), None)
+                discovery = discovery or D.best_for(lang) or {}
+            except Exception as e:
+                _log(f"[genshorts] discovery unavailable ({e})")
+                discovery = {}
     niche = niche or discovery.get("niche") or ""
     if not niche:
         try:
@@ -712,16 +724,29 @@ def _repo_niche_queue(lang):
             return []
 
     scores = _niche_performance(lang)
+    # Live demand from trend_finder. A niche with a high-scoring trending story
+    # RIGHT NOW is worth more than one that merely performed well in the past,
+    # so the two signals are combined (analytics is ~0-12, trend ~0-1.2, hence
+    # the weight).
+    trend = {}
+    try:
+        import trend_finder as TF
+        trend = TF.niche_boost()
+    except Exception:
+        trend = {}
+
+    def combined(niche):
+        return score_for(scores, lang, niche) + TREND_WEIGHT * trend.get(niche, 0.0)
 
     def rank(niche):
-        return -score_for(scores, lang, niche)
+        return -combined(niche)
 
     ranked = sorted(niches, key=rank)
-    if scores:
-        best = [n for n in ranked if score_for(scores, lang, n) > 0]
-        rest = [n for n in ranked if score_for(scores, lang, n) <= 0]
+    if scores or trend:
+        best = [n for n in ranked if combined(n) > 0]
+        rest = [n for n in ranked if combined(n) <= 0]
         _log(f"[genshorts] niche ranking ({lang}): "
-             + ", ".join(f"{n[:20]}={score_for(scores, lang, n):.1f}" for n in best[:5])
+             + ", ".join(f"{n[:18]}={combined(n):.1f}" for n in best[:5])
              + f" | {len(rest)} unproven after")
         ranked = best + rest
     return ranked[:6]
@@ -734,6 +759,44 @@ def _already_mined(niche):
         if t.get("lang") and tag and tag in str(t.get("id", "")):
             return True
     return False
+
+
+def _used_titles():
+    """Titles already turned into a draft (raw strings) so a trend story is not
+    picked twice."""
+    out = []
+    for t in load_generated():
+        for k in ("title", "mined_from"):
+            v = t.get(k)
+            if v:
+                out.append(str(v))
+    return out
+
+
+def _trend_pick(niche, lang="fa"):
+    """Best LIVE trending story inside this niche, or None.
+
+    Owner directive 2026-10-13: the writer should work on what is actually
+    trending, not on a stale headline. trend_finder ranks real videos by OUTLIER
+    score (views vs the channel's own average), so a small channel that
+    overperformed surfaces above the same giants every day.
+    """
+    try:
+        import trend_finder as TF
+        hit = TF.top_for_niche(niche, exclude_titles=_used_titles())
+    except Exception as e:
+        _log(f"[genshorts] trend lookup failed ({type(e).__name__}: {str(e)[:90]})")
+        return None
+    if not hit:
+        return None
+    _log(f"[genshorts] trend hit for {niche!r}: x{hit.get('outlier')} outlier, "
+         f"{hit.get('views', 0):,} views - {hit.get('title', '')[:50]}")
+    return {
+        "title": hit.get("title", ""), "source": "youtube_trending",
+        "views": hit.get("views", 0), "velocity": 0, "niche": niche,
+        "url": hit.get("url", ""), "trend_score": hit.get("score", 0),
+        "outlier": hit.get("outlier", 0), "is_short": hit.get("is_short", False),
+    }
 
 
 def _used_sources(niche):

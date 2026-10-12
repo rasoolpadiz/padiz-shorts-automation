@@ -35,6 +35,13 @@ brand_temp_overlay.png
 gemini_key_check.mp3
 
 # --- Local scratch dirs ---------------------------------------------------
+# Throwaway diagnostics/probes run from the repo root. The leading underscore
+# is the convention for "scratch, never part of the automation".
+_*.py
+_*.txt
+_*.log
+_polls_*.json
+schedule_daily.log
 temp_render/
 render_check/
 aesthetic_build/

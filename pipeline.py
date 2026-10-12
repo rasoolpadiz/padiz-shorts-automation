@@ -1115,6 +1115,17 @@ def upload_to_youtube(video_path: str, title: str, description: str, tags: list,
 
     video_id = response.get("id")
     video_url = f"https://www.youtube.com/shorts/{video_id}"
+
+    # Charge the shared unit budget. An upload costs 1,600 units, so recording it
+    # is what lets discovery know how much of the day's 10,000 is actually left
+    # (before this, discovery had no idea how many uploads had already run and
+    # could spend the upload budget on searching).
+    try:
+        import yt_budget as _B
+        _B.add_units(_B.UPLOAD_COST, reason="upload")
+        print(_B.report())
+    except Exception as _e:
+        print(f"[quota] upload accounting skipped ({_e})")
     return video_url
 
 if __name__ == "__main__":

@@ -210,6 +210,11 @@ HN_NICHES = {
 
 def _quota_used_today():
     """search.list costs 100 quota units per call, so it is budgeted per day."""
+    try:
+        import yt_budget as B
+        return B.search_count_today()
+    except Exception:
+        pass
     q = _json_load(QUOTA_PATH, {})
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     if q.get("date") != today:
@@ -218,6 +223,14 @@ def _quota_used_today():
 
 
 def _quota_add(n=1):
+    """Record n searches. Delegates to yt_budget so the day's uploads (1,600
+    units each) are reserved before discovery spends anything."""
+    try:
+        import yt_budget as B
+        B.add_units(B.COST_SEARCH * max(1, int(n)), reason="search")
+        return
+    except Exception:
+        pass
     q = _json_load(QUOTA_PATH, {})
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     if q.get("date") != today:
@@ -239,6 +252,13 @@ def _age_hours(published, now=None):
 
 def from_youtube(niche, lang, days_back=30):
     """Videos currently climbing inside this niche, via the channel OAuth token."""
+    try:
+        import yt_budget as B
+        if not B.can_spend(B.COST_SEARCH):
+            _log("[discover] unit budget exhausted (uploads come first) - skipping")
+            return []
+    except Exception:
+        pass
     if _quota_used_today() >= MAX_YT_SEARCHES_PER_DAY:
         _log("[discover] YouTube search budget spent today - skipping this niche")
         return []

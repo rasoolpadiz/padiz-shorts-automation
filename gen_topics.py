@@ -277,28 +277,41 @@ def validate(topic, lang):
 
 
 def _research_brief(lang, niche):
-    """What discovery found online inside this niche, as a writer's brief.
+    """What is hot RIGHT NOW inside this niche, as a writer's brief.
 
     Owner directive 2026-10-01: stop handing the writer a bare niche - give it
     the story that is actually hot right now. Returns "" when nothing is cached,
     so the writer behaves exactly as before.
+
+    Owner directive 2026-10-13: prefer trend_finder's LIVE trending stories
+    (ranked by outlier score = views vs the channel's own average) over the
+    legacy discovery pool, which the server could not refresh.
     """
+    picked = []
     try:
-        import discover as D
-        items = (D._json_load(D.POOL_PATH, {}).get(lang) or {}).get("items", [])
+        import trend_finder as TF
+        items = TF.load_pool().get("items") or []
+        picked = [i for i in items if i.get("niche") == niche][:5]
     except Exception:
-        return ""
-    picked = [i for i in items if i.get("niche") == niche][:5]
-    if not picked:
-        picked = items[:5]
+        picked = []
+    if len(picked) < 3:
+        try:
+            import discover as D
+            items = (D._json_load(D.POOL_PATH, {}).get(lang) or {}).get("items", [])
+            extra = [i for i in items if i.get("niche") == niche] or items
+            picked.extend(extra[:5 - len(picked)])
+        except Exception:
+            pass
     if not picked:
         return ""
     lines = []
     for it in picked:
         vel = it.get("velocity") or 0
+        out = it.get("outlier")
+        out_bit = f", outlier x{out}" if out else ""
         lines.append(
             f'- "{it["title"]}" ({it.get("source","")}, {it.get("views",0):,} views,'
-            f' {vel:,.0f} views/hour)'
+            f' {vel:,.0f} views/hour{out_bit})'
         )
     head = (
         'REAL-WORLD RESEARCH (found online today, use as raw material - do NOT copy '
