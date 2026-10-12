@@ -133,7 +133,15 @@ def _prompt(lang, niche, discovery, source_text=""):
     )
 
 
-def _call_gemini(prompt, api_key, rounds=3):
+_GEMINI_FAILS = 0
+# After this many consecutive dead Gemini calls in one process, stop asking.
+# Without the brake a single bad run walked all ~6 niches x 2 attempts x 3
+# retry rounds, each timing out at 60s - the run spent ~10 minutes and the
+# whole daily quota to learn what one failure already told it.
+_GEMINI_FAIL_LIMIT = 4
+
+
+def _call_gemini(prompt, api_key, rounds=2):
     """One text-generation call, with retries. Returns the raw response or ''.
 
     Why the retry loop exists (2026-10-13): the shorts pipeline was dying on
@@ -144,6 +152,9 @@ def _call_gemini(prompt, api_key, rounds=3):
     429 (daily quota) and a bad key are not, so those abort immediately instead
     of burning the run's remaining minutes.
     """
+    global _GEMINI_FAILS
+    if _GEMINI_FAILS >= _GEMINI_FAIL_LIMIT:
+        return ""
     import time as _time
     import urllib.request
     body = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode()
@@ -158,9 +169,10 @@ def _call_gemini(prompt, api_key, rounds=3):
             req = urllib.request.Request(url, data=body,
                                          headers={"Content-Type": "application/json"})
             try:
-                with urllib.request.urlopen(req, timeout=60) as resp:
+                with urllib.request.urlopen(req, timeout=45) as resp:
                     data = json.loads(resp.read().decode("utf-8", "replace"))
                 parts = data["candidates"][0]["content"]["parts"]
+                _GEMINI_FAILS = 0
                 return "".join(p.get("text", "") for p in parts)
             except Exception as e:
                 last_err = str(e)
@@ -168,16 +180,19 @@ def _call_gemini(prompt, api_key, rounds=3):
                 # Bad key / revoked access: no model or retry will fix this.
                 if "api key" in low or "permission_denied" in low or "403" in last_err:
                     _log(f"[genshorts] gemini auth failed ({last_err})")
+                    _GEMINI_FAILS = _GEMINI_FAIL_LIMIT
                     return ""
                 # Daily quota exhausted: retrying within this run is pointless.
                 if ("429" in last_err or "quota" in low
                         or "resource_exhausted" in low or "resource exhausted" in low):
                     _log(f"[genshorts] gemini quota exhausted ({last_err})")
+                    _GEMINI_FAILS = _GEMINI_FAIL_LIMIT
                     return ""
                 # 503 / timeout / connection reset -> next model, then back off.
                 continue
         if rnd < rounds - 1:
             _time.sleep(5 * (rnd + 1))
+    _GEMINI_FAILS += 1
     if last_err:
         _log(f"[genshorts] gemini text failed after {rounds} rounds ({last_err})")
     return ""
@@ -591,7 +606,7 @@ def top_up(lang, count):
             item = None
         if item:
             made.append(item)
-    if not made:
+    if not made and need > 0:
         _log(f"[genshorts] {lang}: every approved niche failed to mine - "
              "nothing publishable this run")
     return made
