@@ -11,7 +11,9 @@ export PADIZ_MINE=1 PADIZ_PRUNE=1
 
 # Refresh code + state before publishing. Never fatal: a stale publish beats a
 # missed slot, and pull.sh always exits 0.
-"$REPO/deploy/pull.sh" || true
+# Invoked via `bash` on purpose: the executable bit is not reliably recorded when
+# the repo is committed from Windows, and a lost bit would silently disable this.
+bash "$REPO/deploy/pull.sh" || true
 
 # The venv used to be resolved as ./.venv/bin/python. That directory lost its
 # bin/ and pyvenv.cfg, so every cron run died with "No such file or directory"

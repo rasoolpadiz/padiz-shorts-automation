@@ -9,7 +9,7 @@ set -a; . "$REPO/.env"; set +a
 export PADIZ_MINE=1 PADIZ_PRUNE=1 PADIZ_KEEP_ARTIFACTS=0
 
 # Refresh code + state first (see run_short.sh for why this is not `git pull`).
-"$REPO/deploy/pull.sh" || true
+bash "$REPO/deploy/pull.sh" || true
 
 # Explicit venv resolution - see run_short.sh.
 PY="$VENV/bin/python"
