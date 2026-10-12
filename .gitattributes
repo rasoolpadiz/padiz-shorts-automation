@@ -1,0 +1,7 @@
+# Shell scripts are executed on Linux. If git stores them with CRLF (which it
+# does when a Windows checkout commits them), the server fails with
+# "$'\r': command not found" and the cron job silently stops publishing.
+*.sh   text eol=lf
+*.py   text eol=lf
+*.yml  text eol=lf
+*.json text eol=lf

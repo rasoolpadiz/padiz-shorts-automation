@@ -1061,10 +1061,13 @@ def build_full_short(topic_data: dict, output_filename: str):
         # way rather than ship a broken video.
         if frames:
             try:
+                # The invariant is that the clip covers the narration. Comparing
+                # against `duration` would be wrong: -shortest cuts the output at
+                # the audio, so the +0.4s tail never reaches the file.
                 got = get_audio_duration(clip_path)
-                if abs(got - duration) > 0.6:
-                    print(f"[caption] slide {idx} timing off ({got:.2f}s vs {duration:.2f}s)"
-                          f" - rebuilding static")
+                if abs(got - speech_dur) > 0.5:
+                    print(f"[caption] slide {idx} timing off ({got:.2f}s vs "
+                          f"{speech_dur:.2f}s narration) - rebuilding static")
                     subprocess.run([
                         "ffmpeg", "-y", "-loop", "1", "-i", img_path, "-i", audio_path,
                         "-t", f"{duration:.2f}", "-vf", "scale=1080:1920,format=yuv420p",

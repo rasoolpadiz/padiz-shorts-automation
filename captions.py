@@ -234,17 +234,18 @@ def build_frames(slide_png, speech, audio_duration, out_dir, tag,
 def write_concat_list(frames, out_path, tail=0.0):
     """ffmpeg concat demuxer list with per-frame durations.
 
-    The concat demuxer ignores the duration of the final entry, so the last file
-    is repeated (the documented workaround) - that is what holds the final
-    caption on screen for `tail` seconds instead of cutting it short.
+    The concat demuxer ignores the duration of the FINAL entry, so the list must
+    end with a bare `file` line (the documented "closer"). `tail` is therefore
+    folded into the last frame's own duration rather than appended as another
+    entry - appending it would put it on the one line that is thrown away.
     """
     lines = []
-    for path, dur in frames:
+    last_i = len(frames) - 1
+    for i, (path, dur) in enumerate(frames):
+        d = dur + (tail if i == last_i else 0.0)
         lines.append(f"file '{path.replace(os.sep, '/')}'")
-        lines.append(f"duration {max(dur, MIN_STATE):.3f}")
-    lines.append(f"file '{frames[-1][0].replace(os.sep, '/')}'")
-    if tail > 0:
-        lines.append(f"duration {tail:.3f}")
+        lines.append(f"duration {max(d, MIN_STATE):.3f}")
+    lines.append(f"file '{frames[last_i][0].replace(os.sep, '/')}'")   # closer
     with open(out_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
     return out_path
