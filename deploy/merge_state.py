@@ -56,9 +56,23 @@ def _load(path):
 
 
 def _key(item):
-    """Identity of one published entry. Prefer id, fall back to url, then title."""
+    """Identity of one PUBLISH EVENT.
+
+    This must not be the topic id: `id` is the topic slug and repeats every time
+    the same topic is published again, so keying on it makes the union keep the
+    older record and silently drop the newer one - which is how today's uploads
+    disappeared from posted_shorts.json. The upload URL (or video id) is unique
+    per publish, so that is what identifies an event.
+    """
     if isinstance(item, dict):
-        for k in ("id", "video_id", "url", "title"):
+        for k in ("url", "video_id", "videoId"):
+            if item.get(k):
+                return str(item[k])
+        # No URL recorded: fall back to topic + timestamp, so two publishes of
+        # the same topic on different days stay distinct.
+        if item.get("id"):
+            return f"{item['id']}@{item.get('posted_at', '')}"
+        for k in ("id", "title"):
             if item.get(k):
                 return str(item[k])
     return json.dumps(item, sort_keys=True, ensure_ascii=False)
