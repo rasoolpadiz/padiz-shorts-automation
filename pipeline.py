@@ -186,7 +186,13 @@ def detect_shorts_mood(category: str, title: str = "", text: str = "") -> str:
             return mood
     return "science"
 
-def create_slide_image(category: str, title: str, text: str, slide_num: int, total_slides: int, output_path: str, lang: str = None):
+def shorts_theme(category: str, title: str, text: str, lang: str = None):
+    """Resolve the Shorts palette for one slide. Returns (THEME, en_mode, mood).
+
+    Extracted from create_slide_image so the caption renderer draws in the SAME
+    colours as the slide it sits on (accent = mood accent). The FA branch is the
+    legacy look and must stay pixel-identical.
+    """
     # Theme per language: FA keeps the EXACT legacy look, EN gets its own
     # identity so viewers instantly tell them apart on the channel grid.
     lang_pinned = (lang or "").strip().lower()
@@ -236,7 +242,23 @@ def create_slide_image(category: str, title: str, text: str, slide_num: int, tot
     THEME["topbar"] = _mood["topbar"]
     THEME["progress"] = _mood["accent"]
     THEME["divider"] = _mood["accent"]
+    # The raw mood accent, kept separate from the tinted fields above. The
+    # caption renderer highlights the spoken word with this: "topbar" is the
+    # darkened variant meant to sit behind a 24px bar and reads as near-invisible
+    # on the navy card, whereas this one is the bright version.
+    THEME["accent"] = _mood["accent"]
     THEME["_mood"] = mood
+    return THEME, en_mode, mood
+
+
+def create_slide_image(category: str, title: str, text: str, slide_num: int, total_slides: int, output_path: str, lang: str = None, captions_on: bool = False):
+    """Draw one Shorts slide.
+
+    captions_on=True suppresses the static body block, because the animated
+    captions are rendered INTO that space (see captions.py). Leaving the body
+    text in place would put two competing blocks of Persian text on screen.
+    """
+    THEME, en_mode, _mood = shorts_theme(category, title, text, lang)
 
     width, height = 1080, 1920
     img = Image.new("RGB", (width, height), color=THEME["bg"])
@@ -270,39 +292,40 @@ def create_slide_image(category: str, title: str, text: str, slide_num: int, tot
 
     draw.line([(card_margin + 60, card_top + 210), (width - card_margin - 60, card_top + 210)], fill=THEME["divider"], width=2)
 
-    content_font = font_for(text, 46)
-    body_lines = _wrap_to_width(draw, text, content_font, SAFE_W, max_lines=3)
-    # Auto-shrink body if 3 lines still overflow vertically.
-    while len(body_lines) >= 3 and content_font.size > 34:
-        probe = _wrap_to_width(draw, text, font_for(text, content_font.size - 4),
-                               SAFE_W, max_lines=3)
-        if sum(1 for _ in probe) < 4:
-            content_font = font_for(text, content_font.size - 4)
-            body_lines = probe
-            if len(body_lines) <= 3:
+    if not captions_on:
+        content_font = font_for(text, 46)
+        body_lines = _wrap_to_width(draw, text, content_font, SAFE_W, max_lines=3)
+        # Auto-shrink body if 3 lines still overflow vertically.
+        while len(body_lines) >= 3 and content_font.size > 34:
+            probe = _wrap_to_width(draw, text, font_for(text, content_font.size - 4),
+                                   SAFE_W, max_lines=3)
+            if sum(1 for _ in probe) < 4:
+                content_font = font_for(text, content_font.size - 4)
+                body_lines = probe
+                if len(body_lines) <= 3:
+                    break
+            else:
                 break
-        else:
-            break
-        if content_font.size <= 34:
-            break
-    lines = body_lines
+            if content_font.size <= 34:
+                break
+        lines = body_lines
 
-    line_height = 80
-    total_h = len(lines) * line_height
-    start_y = card_top + 340 + ((card_bottom - card_top - 420 - total_h) // 2)
+        line_height = 80
+        total_h = len(lines) * line_height
+        start_y = card_top + 340 + ((card_bottom - card_top - 420 - total_h) // 2)
 
-    for i, line in enumerate(lines):
-        y = start_y + (i * line_height)
-        draw_smart(draw, (width // 2, y), line, content_font, THEME["body"],
-                   max_width=SAFE_W)
+        for i, line in enumerate(lines):
+            y = start_y + (i * line_height)
+            draw_smart(draw, (width // 2, y), line, content_font, THEME["body"],
+                       max_width=SAFE_W)
 
-    # Mood accent bar under the body block (shorts "designed detail").
-    bar_w = min(int(max((_measure(draw, l, content_font) for l in lines),
-                        default=0)) + 60, SAFE_W)
-    draw.rounded_rectangle(
-        [(width / 2 - bar_w / 2, start_y + len(lines) * line_height + 18),
-         (width / 2 + bar_w / 2, start_y + len(lines) * line_height + 30)],
-        radius=6, fill=THEME["divider"])
+        # Mood accent bar under the body block (shorts "designed detail").
+        bar_w = min(int(max((_measure(draw, l, content_font) for l in lines),
+                            default=0)) + 60, SAFE_W)
+        draw.rounded_rectangle(
+            [(width / 2 - bar_w / 2, start_y + len(lines) * line_height + 18),
+             (width / 2 + bar_w / 2, start_y + len(lines) * line_height + 30)],
+            radius=6, fill=THEME["divider"])
 
     progress_font = font_for("test", 34)
     sub_font = font_for("Subscribe", 42)
@@ -968,25 +991,94 @@ def build_full_short(topic_data: dict, output_filename: str):
             voice = slide.get("voice") or lang_voices[(base_voice_idx + idx - 1) % len(lang_voices)]
             generate_voice(slide["speech"], voice, audio_paths[idx - 1])
 
+    # Word-by-word captions. ON by default because they are the single biggest
+    # retention lever on a Short; SHORTS_CAPTIONS=0 restores the old static body
+    # text. Each slide is rendered as one PNG per spoken word and fed to ffmpeg
+    # as a timed concat list (see captions.py).
+    CAP = None
+    try:
+        import captions as CAP
+        if not CAP.enabled():
+            CAP = None
+    except Exception as _e:
+        print(f"[caption] unavailable ({_e}) - using static slides")
+        CAP = None
+    if CAP:
+        print("[caption] word-by-word captions ON (set SHORTS_CAPTIONS=0 to disable)")
+
     for idx, slide in enumerate(slides, start=1):
         img_path = os.path.join(work_dir, f"slide_{idx}.png")
         audio_path = audio_paths[idx - 1]
         clip_path = os.path.join(work_dir, f"clip_{idx}.mp4")
 
-        create_slide_image(category, slide["title"], slide["text"], idx, total, img_path, lang=topic_lang or None)
-        duration = get_audio_duration(audio_path) + 0.4
+        speech_dur = get_audio_duration(audio_path)
+        duration = speech_dur + 0.4
 
-        ffmpeg_clip = [
-            "ffmpeg", "-y",
-            "-loop", "1", "-i", img_path,
-            "-i", audio_path,
-            "-t", f"{duration:.2f}",
-            "-vf", "scale=1080:1920,format=yuv420p",
-            "-c:v", "libx264", "-tune", "stillimage", "-preset", "fast", "-crf", "18",
-            "-c:a", "aac", "-b:a", "192k", "-shortest",
-            clip_path
-        ]
+        frames = None
+        if CAP:
+            try:
+                create_slide_image(category, slide["title"], slide["text"], idx, total,
+                                   img_path, lang=topic_lang or None, captions_on=True)
+                frames = CAP.build_frames(
+                    img_path, slide.get("speech", ""), speech_dur, work_dir, f"{idx:02d}",
+                    category=category, title=slide["title"], text=slide["text"],
+                    lang=topic_lang or None)
+            except Exception as e:
+                print(f"[caption] slide {idx} failed ({type(e).__name__}: {e}) - static slide")
+                frames = None
+
+        if frames:
+            lst = CAP.write_concat_list(frames, os.path.join(work_dir, f"cap_{idx}.txt"), tail=0.4)
+            ffmpeg_clip = [
+                "ffmpeg", "-y",
+                "-f", "concat", "-safe", "0", "-i", lst,
+                "-i", audio_path,
+                "-t", f"{duration:.2f}",
+                "-vsync", "vfr",
+                "-pix_fmt", "yuv420p",
+                "-c:v", "libx264", "-tune", "stillimage", "-preset", "fast", "-crf", "18",
+                "-c:a", "aac", "-b:a", "192k", "-shortest",
+                clip_path
+            ]
+        else:
+            create_slide_image(category, slide["title"], slide["text"], idx, total,
+                               img_path, lang=topic_lang or None)
+            ffmpeg_clip = [
+                "ffmpeg", "-y",
+                "-loop", "1", "-i", img_path,
+                "-i", audio_path,
+                "-t", f"{duration:.2f}",
+                "-vf", "scale=1080:1920,format=yuv420p",
+                "-c:v", "libx264", "-tune", "stillimage", "-preset", "fast", "-crf", "18",
+                "-c:a", "aac", "-b:a", "192k", "-shortest",
+                clip_path
+            ]
+
         subprocess.run(ffmpeg_clip, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        # A caption clip whose duration drifted means the concat timing was not
+        # honoured, which would desync every later slide. Rebuild it the plain
+        # way rather than ship a broken video.
+        if frames:
+            try:
+                got = get_audio_duration(clip_path)
+                if abs(got - duration) > 0.6:
+                    print(f"[caption] slide {idx} timing off ({got:.2f}s vs {duration:.2f}s)"
+                          f" - rebuilding static")
+                    subprocess.run([
+                        "ffmpeg", "-y", "-loop", "1", "-i", img_path, "-i", audio_path,
+                        "-t", f"{duration:.2f}", "-vf", "scale=1080:1920,format=yuv420p",
+                        "-c:v", "libx264", "-tune", "stillimage", "-preset", "fast",
+                        "-crf", "18", "-c:a", "aac", "-b:a", "192k", "-shortest", clip_path,
+                    ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception as e:
+                print(f"[caption] slide {idx} verify skipped ({e})")
+            for _p, _d in frames:
+                try:
+                    os.remove(_p)
+                except OSError:
+                    pass
+
         clip_files.append(clip_path)
 
     concat_list_file = os.path.join(work_dir, "concat_list.txt")
