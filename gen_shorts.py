@@ -534,20 +534,6 @@ def build_short(lang, niche=None, discovery=None, api_key=None, dry_run=False):
 
     suffix = _slug(discovery.get("title", ""))[:22] or (_slug(source_text)[:22] or "story")
     base_id = f"{lang}_auto_{_slug(niche)[:20]}_{suffix}"
-    topic_id = base_id
-    if topic_id in covered or topic_id in _posted_ids():
-        # The niche+source pair is spent. With avoid= above the miner should
-        # already have moved to a new source, so this only fires when every
-        # source for the niche is exhausted. Stamp a unique discriminator rather
-        # than dropping good content on the floor - "publish a fresh angle" beats
-        # "publish nothing", which is exactly how the channel stalled.
-        import hashlib
-        disc = hashlib.sha1(
-            (source_text or niche or "x").encode("utf-8")).hexdigest()[:5]
-        topic_id = f"{base_id}_{disc}"
-        if topic_id in covered or topic_id in _posted_ids():
-            _log("[genshorts] this topic already published - skipping")
-            return None
 
     data = None
     gem_key = (api_key or "").strip()
@@ -576,6 +562,22 @@ def build_short(lang, niche=None, discovery=None, api_key=None, dry_run=False):
         # publishing nothing, so a failed draft simply produces no Short.
         _log("[genshorts] gemini draft rejected twice - skipping this topic "
              "instead of using the banned template")
+        return None
+
+    # Content-addressed id. The id used to be niche + discovery headline, which
+    # is IDENTICAL for every draft built in one run - so when top_up asked for
+    # two drafts the second silently overwrote the first and the stock never
+    # grew. Hashing the generated content gives two different drafts two
+    # different ids, while a genuine re-generation of the same content still
+    # collides and is refused as a repeat.
+    import hashlib
+    fingerprint = json.dumps(
+        [data.get("title", "")] + [str(s.get("speech", "")) for s in data.get("slides", [])],
+        ensure_ascii=False, sort_keys=True)
+    disc = hashlib.sha1(fingerprint.encode("utf-8")).hexdigest()[:6]
+    topic_id = f"{base_id}_{disc}"
+    if topic_id in covered or topic_id in _posted_ids():
+        _log("[genshorts] an identical draft already exists - skipping")
         return None
 
     data = _normalize(data, lang, niche, discovery, topic_id)
@@ -769,8 +771,8 @@ def _build_from_repo_niche(lang):
         _log("[genshorts] niche queue is empty (topics_niches missing?)")
         return None
 
-    def attempt(allow_used):
-        for niche in queue:
+    def attempt(allow_used, order=None):
+        for niche in (order or queue):
             if not allow_used and _already_mined(niche):
                 continue
             item = build_short(lang, niche=niche)
@@ -782,7 +784,16 @@ def _build_from_repo_niche(lang):
     item = attempt(allow_used=False)
     if item is None:
         _log("[genshorts] every fresh niche failed - retrying with known niches")
-        item = attempt(allow_used=True)
+
+        def drafts_for(niche):
+            tag = _slug(niche)[:20]
+            return sum(1 for t in load_generated()
+                       if tag and tag in str(t.get("id", "")))
+
+        # Least-used niche first. The ranked queue always put the top performer
+        # first, so asking for two drafts in one run produced two Shorts from the
+        # SAME niche and they read as near-duplicates on the channel.
+        item = attempt(allow_used=True, order=sorted(queue, key=drafts_for))
     return item
 
 
