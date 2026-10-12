@@ -34,6 +34,17 @@ DIRS = [
     "topics_generated",
 ]
 
+# Files where the server's live copy replaces the repo's outright.
+#
+# discovery_quota.json is the shared YouTube unit ledger (yt_budget.py). It is
+# tracked in git, so without this the reset in pull.sh wipes the day's spend -
+# observed live: the trend refresh recorded 304 units, the next pull zeroed it,
+# and the following upload reported spent=1600 instead of 1904. Under-counting
+# the ledger is what lets discovery overspend the budget.
+SERVER_WINS = [
+    "discovery_quota.json",
+]
+
 
 def _load(path):
     try:
@@ -125,6 +136,14 @@ def main():
     for rel in DIRS:
         added = merge_dir(os.path.join(snap, rel), os.path.join(repo, rel))
         print(f"[state] {rel}/: +{added} file(s) recovered from the server")
+
+    for rel in SERVER_WINS:
+        s = os.path.join(snap, rel)
+        r = os.path.join(repo, rel)
+        if os.path.exists(s):
+            os.makedirs(os.path.dirname(r) or ".", exist_ok=True)
+            shutil.copy2(s, r)
+            print(f"[state] {rel}: kept the server's live copy")
     return 0
 
 

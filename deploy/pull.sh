@@ -14,6 +14,9 @@
 # the "already published" set, never removes one, so the worst case is a skipped
 # video rather than a duplicate upload.
 #
+# discovery_quota.json (the shared unit ledger) is restored wholesale, since the
+# repo's copy can only ever be a stale snapshot from a local run.
+#
 # Never fatal: if the fetch fails the caller keeps publishing with the code that
 # is already on disk. A stale publish beats no publish.
 set -uo pipefail
@@ -31,7 +34,7 @@ BEFORE=$(git rev-parse --short HEAD 2>/dev/null || echo '?')
 # 1. Snapshot the live publish state BEFORE anything can rewind it.
 rm -rf "$SNAP"
 mkdir -p "$SNAP/longform_out"
-for f in posted_shorts.json longform_out/posted_long.json; do
+for f in posted_shorts.json longform_out/posted_long.json discovery_quota.json; do
   [ -f "$f" ] && cp -a "$f" "$SNAP/$f"
 done
 for d in shorts_generated topics_generated; do
