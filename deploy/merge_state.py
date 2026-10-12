@@ -84,12 +84,20 @@ def _key(item):
 
 
 def merge_list(server_path, repo_path):
-    """Union two JSON lists of published entries. Returns (kept, added)."""
+    """Union two JSON lists of published entries. Returns (kept, added).
+
+    posted_shorts.json is a list but longform_out/posted_long.json is a DICT
+    ({"posted": {...}, "counts": {...}}). Anything that is not a list on either
+    side is left to the server, which is always the authoritative copy here -
+    a shape mismatch must never end in the repo's version overwriting it.
+    """
     server = _load(server_path)
     repo = _load(repo_path)
 
     if not isinstance(server, list):
-        return 0, 0                      # nothing usable to restore
+        if server is not None and not isinstance(repo, list):
+            shutil.copy2(server_path, repo_path)
+        return 0, 0
     if not isinstance(repo, list):
         # The repo has no usable copy - keep the server's outright.
         shutil.copy2(server_path, repo_path)
