@@ -1,3 +1,0 @@
-Openverse/cc0/w_lemay
-https://api.openverse.org/v1/images/9f15eb44-bb61-4b3a-9f4c-ad345c482cf3/thumb/?full_size=true
-person looking out window city

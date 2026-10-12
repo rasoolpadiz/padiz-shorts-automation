@@ -1,3 +1,0 @@
-Openverse/pdm/Foto Miki Digital
-https://api.openverse.org/v1/images/e7d4f1ad-9da1-4dcd-90ad-5db0882cee28/thumb/?full_size=true
-modern office

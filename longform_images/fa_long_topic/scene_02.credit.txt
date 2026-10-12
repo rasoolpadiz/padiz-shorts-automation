@@ -1,3 +1,0 @@
-Openverse/cc0/booledozer
-https://api.openverse.org/v1/images/a09cff00-9f1f-40c2-a781-b6f364e791e8/thumb/?full_size=true
-tired man

@@ -1,3 +1,0 @@
-Openverse/pdm/Anothernumber6
-https://api.openverse.org/v1/images/4a9ee597-4a15-486a-978a-9ee27b027fd9/thumb/?full_size=true
-chess board

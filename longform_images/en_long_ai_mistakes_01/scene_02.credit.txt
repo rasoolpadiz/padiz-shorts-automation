@@ -1,3 +1,0 @@
-Openverse/cc0/unknown
-https://api.openverse.org/v1/images/ebe0eaec-ea93-45b1-87e4-375d85594e7d/thumb/?full_size=true
-compass needle

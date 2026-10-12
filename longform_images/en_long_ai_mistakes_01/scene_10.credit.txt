@@ -1,3 +1,0 @@
-Openverse/pdm/smallcurio
-https://api.openverse.org/v1/images/287a4b4e-74a2-4df8-a66d-f4ac5c4c4e9f/thumb/?full_size=true
-person writing

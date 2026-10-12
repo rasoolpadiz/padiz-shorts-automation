@@ -1,3 +1,0 @@
-Openverse/cc0/Image Catalog
-https://api.openverse.org/v1/images/4dd034ca-889f-4c65-a59f-a35f7cc3c0f0/thumb/?full_size=true
-two people

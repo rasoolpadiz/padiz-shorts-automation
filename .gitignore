@@ -52,3 +52,34 @@ voice_check/
 # tracked assets used by the runner, so they are deliberately not ignored.
 token_health.json
 mine_raw.txt
+
+# --- Per-run render artifacts: MUST NOT be tracked -------------------------
+# These are produced during a run and deleted by cleanup_artifacts.py after a
+# successful upload. Tracking them defeats that completely: git restores every
+# one of them on each pull, so the server re-materialises the whole archive
+# (measured: 461 files, 820MB of mp4/mp3/jpg/srt) - and with the auto-pull
+# running every 30 minutes that happens 48 times a day. It is also what made
+# .git grow to 751MB. "No archives on the server" only holds if git does not
+# carry them.
+longform_out/*.mp4
+longform_out/*.mp3
+longform_out/*.wav
+longform_out/*.jpg
+longform_out/*.png
+longform_out/*.srt
+longform_out/*.txt
+longform_out/*/
+longform_out/*.json
+!longform_out/posted_long.json
+longform_images/
+short_out/
+_used_images.json
+check_*.png
+
+# Demo / comparison clips left in the repo root. cleanup_artifacts.py deletes
+# them too, so tracking them is pure churn.
+fa_demo_*.mp4
+en_demo_*.mp4
+fa_hook_*.mp4
+en_hook_*.mp4
+fa_voice_compare.mp4
