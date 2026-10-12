@@ -402,9 +402,18 @@ def _call_gemini(prompt, api_key):
     from google import genai
     from google.genai import types as genai_types
     client = genai.Client(api_key=api_key)
-    # Verified live 2026-10-09 with the owner's key: gemini-3.8-flash OK.
-    # gemini-2.5-flash / 2.0-flash are DEAD (404) for new keys - removed.
-    for model in ("gemini-3.8-flash", "gemini-flash-latest"):
+    # Quota is metered PER MODEL, so a 429 on the primary model does not mean
+    # the API is down - the lite / other-version models still answer. Verified
+    # live 2026-10-13 while gemini-3.8-flash was 429 (the shorts writer was
+    # dying on it): 3.6-flash, 3.5-flash, 3-flash-preview, 3.1-flash-lite,
+    # 3.5-flash-lite and flash-lite-latest all returned 200. Rotating the list
+    # is what keeps the daily long-form publishing on the free tier.
+    models = (
+        "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash",
+        "gemini-flash-latest", "gemini-3-flash-preview", "gemini-3.7-flash",
+        "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.1-flash-lite",
+    )
+    for model in models:
         try:
             r = client.models.generate_content(
                 model=model,
@@ -416,7 +425,7 @@ def _call_gemini(prompt, api_key):
             if r.text:
                 return r.text
         except Exception as e:
-            print(f"[gen] {model} failed: {e}")
+            print(f"[gen] {model} failed: {str(e)[:120]}")
     return None
 
 

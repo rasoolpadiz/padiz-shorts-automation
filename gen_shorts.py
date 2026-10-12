@@ -135,22 +135,32 @@ def _prompt(lang, niche, discovery, source_text=""):
 
 _GEMINI_FAILS = 0
 # After this many consecutive dead Gemini calls in one process, stop asking.
-# Without the brake a single bad run walked all ~6 niches x 2 attempts x 3
-# retry rounds, each timing out at 60s - the run spent ~10 minutes and the
-# whole daily quota to learn what one failure already told it.
-_GEMINI_FAIL_LIMIT = 4
+_GEMINI_FAIL_LIMIT = 3
+
+# Model rotation (2026-10-13). Google meters quota PER MODEL, so when
+# gemini-3.8-flash returns 429 the lite / other-version models still answer.
+# Verified live on the owner's key while 3.8-flash was 429:
+#   3.6-flash OK, 3.5-flash OK, 3-flash-preview OK, 3.1-flash-lite OK,
+#   3.5-flash-lite OK, flash-lite-latest OK, 3.7-flash 503, 2.5-* 404.
+# Rotating through this list is what keeps a Short coming out every day.
+_GEMINI_MODELS = (
+    "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash",
+    "gemini-flash-latest", "gemini-3-flash-preview", "gemini-3.7-flash",
+    "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.1-flash-lite",
+)
 
 
-def _call_gemini(prompt, api_key, rounds=2):
-    """One text-generation call, with retries. Returns the raw response or ''.
+def _call_gemini(prompt, api_key, budget=150):
+    """One text-generation call, rotating models. Returns the raw text or ''.
 
-    Why the retry loop exists (2026-10-13): the shorts pipeline was dying on
-    *transient* Gemini errors - the server log is full of "HTTP Error 503:
-    Service Unavailable" and "The read operation timed out" - and a single miss
-    meant no draft at all, so no Short was published for days while the
-    long-form (one call a day) kept working. 503/timeout are worth retrying;
-    429 (daily quota) and a bad key are not, so those abort immediately instead
-    of burning the run's remaining minutes.
+    Two failure modes used to kill the whole run (2026-10-11..13, no Shorts for
+    days while the long-form kept working):
+      * a transient 503/timeout was never retried, and
+      * a 429 on the primary model was treated as "the API is down", when in
+        fact only THAT model was out of quota - the lite models still answered.
+    Now a dead model is skipped and the next one is tried, within a time budget
+    so a bad day cannot stretch one run to ten minutes. A bad key is still fatal
+    (no model or retry fixes it).
     """
     global _GEMINI_FAILS
     if _GEMINI_FAILS >= _GEMINI_FAIL_LIMIT:
@@ -159,17 +169,20 @@ def _call_gemini(prompt, api_key, rounds=2):
     import urllib.request
     body = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode()
     last_err = ""
-    # Newest+fastest first, then the stable aliases. A dead model (404) is
-    # cheap to skip, so the list can stay broad.
-    models = ("gemini-3.8-flash", "gemini-flash-latest", "gemini-2.5-flash")
-    for rnd in range(rounds):
-        for model in models:
+    started = _time.time()
+    passes = 0
+    while True:
+        passes += 1
+        quota_only = True
+        for model in _GEMINI_MODELS:
+            if _time.time() - started > budget:
+                break
             url = ("https://generativelanguage.googleapis.com/v1beta/models/"
                    f"{model}:generateContent?key=" + api_key)
             req = urllib.request.Request(url, data=body,
                                          headers={"Content-Type": "application/json"})
             try:
-                with urllib.request.urlopen(req, timeout=45) as resp:
+                with urllib.request.urlopen(req, timeout=25) as resp:
                     data = json.loads(resp.read().decode("utf-8", "replace"))
                 parts = data["candidates"][0]["content"]["parts"]
                 _GEMINI_FAILS = 0
@@ -182,19 +195,24 @@ def _call_gemini(prompt, api_key, rounds=2):
                     _log(f"[genshorts] gemini auth failed ({last_err})")
                     _GEMINI_FAILS = _GEMINI_FAIL_LIMIT
                     return ""
-                # Daily quota exhausted: retrying within this run is pointless.
+                if "404" in last_err:
+                    continue                      # model not enabled for this key
                 if ("429" in last_err or "quota" in low
                         or "resource_exhausted" in low or "resource exhausted" in low):
-                    _log(f"[genshorts] gemini quota exhausted ({last_err})")
-                    _GEMINI_FAILS = _GEMINI_FAIL_LIMIT
-                    return ""
-                # 503 / timeout / connection reset -> next model, then back off.
+                    continue                      # only THIS model is spent
+                quota_only = False                # 503 / timeout / reset
                 continue
-        if rnd < rounds - 1:
-            _time.sleep(5 * (rnd + 1))
+        # A full pass with no success.
+        if quota_only:
+            _log("[genshorts] gemini quota exhausted on every model")
+            _GEMINI_FAILS = _GEMINI_FAIL_LIMIT
+            return ""
+        if _time.time() - started > budget or passes >= 2:
+            break
+        _time.sleep(5)
     _GEMINI_FAILS += 1
     if last_err:
-        _log(f"[genshorts] gemini text failed after {rounds} rounds ({last_err})")
+        _log(f"[genshorts] gemini text failed ({last_err})")
     return ""
 
 
