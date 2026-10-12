@@ -133,38 +133,53 @@ def _prompt(lang, niche, discovery, source_text=""):
     )
 
 
-def _call_gemini(prompt, api_key):
-    """One text-generation call. Returns the raw response string or ''.
+def _call_gemini(prompt, api_key, rounds=3):
+    """One text-generation call, with retries. Returns the raw response or ''.
 
-    Tries newest model first: Google retires old model names (2026-10 the hardcoded
-    gemini-2.0-flash returned 404 and every Short fell back to the template), so
-    the same fallback list gen_topics.py uses is applied here.
+    Why the retry loop exists (2026-10-13): the shorts pipeline was dying on
+    *transient* Gemini errors - the server log is full of "HTTP Error 503:
+    Service Unavailable" and "The read operation timed out" - and a single miss
+    meant no draft at all, so no Short was published for days while the
+    long-form (one call a day) kept working. 503/timeout are worth retrying;
+    429 (daily quota) and a bad key are not, so those abort immediately instead
+    of burning the run's remaining minutes.
     """
+    import time as _time
     import urllib.request
     body = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode()
     last_err = ""
-    # Models verified live against GET /v1beta/models on 2026-10-09 with this key:
-    # gemini-3.8-flash returned HTTP 200 (generateContent). gemini-2.5-flash /
-    # 2.0-flash return 404 for new keys, so they are dropped from the fallbacks.
-    # Newest+fastest first, then the stable alias.
-    for model in ("gemini-3.8-flash", "gemini-flash-latest"):
-        url = ("https://generativelanguage.googleapis.com/v1beta/models/"
-               f"{model}:generateContent?key=" + api_key)
-        req = urllib.request.Request(url, data=body,
-                                     headers={"Content-Type": "application/json"})
-        try:
-            with urllib.request.urlopen(req, timeout=90) as resp:
-                data = json.loads(resp.read().decode("utf-8", "replace"))
-            parts = data["candidates"][0]["content"]["parts"]
-            return "".join(p.get("text", "") for p in parts)
-        except Exception as e:
-            last_err = str(e)
-            # 429/400 quota or auth: trying other models will not help.
-            if "429" in last_err or "API key" in last_err:
-                break
-            continue
+    # Newest+fastest first, then the stable aliases. A dead model (404) is
+    # cheap to skip, so the list can stay broad.
+    models = ("gemini-3.8-flash", "gemini-flash-latest", "gemini-2.5-flash")
+    for rnd in range(rounds):
+        for model in models:
+            url = ("https://generativelanguage.googleapis.com/v1beta/models/"
+                   f"{model}:generateContent?key=" + api_key)
+            req = urllib.request.Request(url, data=body,
+                                         headers={"Content-Type": "application/json"})
+            try:
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    data = json.loads(resp.read().decode("utf-8", "replace"))
+                parts = data["candidates"][0]["content"]["parts"]
+                return "".join(p.get("text", "") for p in parts)
+            except Exception as e:
+                last_err = str(e)
+                low = last_err.lower()
+                # Bad key / revoked access: no model or retry will fix this.
+                if "api key" in low or "permission_denied" in low or "403" in last_err:
+                    _log(f"[genshorts] gemini auth failed ({last_err})")
+                    return ""
+                # Daily quota exhausted: retrying within this run is pointless.
+                if ("429" in last_err or "quota" in low
+                        or "resource_exhausted" in low or "resource exhausted" in low):
+                    _log(f"[genshorts] gemini quota exhausted ({last_err})")
+                    return ""
+                # 503 / timeout / connection reset -> next model, then back off.
+                continue
+        if rnd < rounds - 1:
+            _time.sleep(5 * (rnd + 1))
     if last_err:
-        _log(f"[genshorts] gemini text failed ({last_err})")
+        _log(f"[genshorts] gemini text failed after {rounds} rounds ({last_err})")
     return ""
 
 
@@ -455,7 +470,9 @@ def build_short(lang, niche=None, discovery=None, api_key=None, dry_run=False):
     if _mine_enabled():
         try:
             import content_mine as CM
-            mined = CM.mine(niche, lang)
+            # avoid= makes the miner skip sources already used for this niche so
+            # the next Short is a NEW story, not the same article re-cut.
+            mined = CM.mine(niche, lang, avoid=_used_sources(niche))
             if mined:
                 source_text = mined.get("text", "")
                 # Explicit flag: run_daily gates on this. Deriving "was it
@@ -483,10 +500,21 @@ def build_short(lang, niche=None, discovery=None, api_key=None, dry_run=False):
         discovery.setdefault("velocity", 0)
 
     suffix = _slug(discovery.get("title", ""))[:22] or (_slug(source_text)[:22] or "story")
-    topic_id = f"{lang}_auto_{_slug(niche)[:20]}_{suffix}"
+    base_id = f"{lang}_auto_{_slug(niche)[:20]}_{suffix}"
+    topic_id = base_id
     if topic_id in covered or topic_id in _posted_ids():
-        _log("[genshorts] this topic already published - skipping")
-        return None
+        # The niche+source pair is spent. With avoid= above the miner should
+        # already have moved to a new source, so this only fires when every
+        # source for the niche is exhausted. Stamp a unique discriminator rather
+        # than dropping good content on the floor - "publish a fresh angle" beats
+        # "publish nothing", which is exactly how the channel stalled.
+        import hashlib
+        disc = hashlib.sha1(
+            (source_text or niche or "x").encode("utf-8")).hexdigest()[:5]
+        topic_id = f"{base_id}_{disc}"
+        if topic_id in covered or topic_id in _posted_ids():
+            _log("[genshorts] this topic already published - skipping")
+            return None
 
     data = None
     gem_key = (api_key or "").strip()
@@ -539,16 +567,16 @@ def top_up(lang, count):
         _log("[genshorts] top_up(lang='en') blocked - Persian-only channel")
         return []
 
-    # Only PUBLISHABLE drafts count toward the target. Old drafts written before
-    # mining was wired up carry no mined_from, and run_daily refuses those - so
-    # counting them made top_up report "0 new" on an empty, unpublishable stock.
-    # Drafts whose topic_id is already in posted_shorts.json are refused by
-    # run_daily too (ID collision guard), so they must not count as stock -
-    # otherwise the pipeline stalls forever behind a phantom draft.
+    # Only PUBLISHABLE drafts count toward the target. A draft is publishable
+    # when it was WRITTEN BY GEMINI (fallback=False) and its topic_id is not
+    # already in posted_shorts.json (run_daily's ID-collision guard would refuse
+    # it). The old filter additionally demanded a "mined" flag, which silently
+    # made every draft that Gemini wrote from a niche (mining unavailable) count
+    # as zero stock - the pipeline then re-mined forever and published nothing.
     posted_ids = _posted_ids()
     existing = [t for t in load_generated()
                 if t.get("lang") == lang and not t.get("posted")
-                and not t.get("fallback") and (t.get("mined") or t.get("mined_from"))
+                and not t.get("fallback")
                 and t.get("id") not in posted_ids]
     if len(existing) < count:
         _log(f"[genshorts] {lang}: {len(existing)} publishable draft(s), "
@@ -671,6 +699,27 @@ def _already_mined(niche):
         if t.get("lang") and tag and tag in str(t.get("id", "")):
             return True
     return False
+
+
+def _used_sources(niche):
+    """Source titles already mined for this niche (normalized), so the miner can
+    pick a DIFFERENT article instead of regenerating the same story.
+
+    Without this, content_mine always returns the same Wikipedia page for a
+    niche, the topic_id is therefore identical every run, and build_short threw
+    the good mined text away as "already published" - the channel stalled with
+    an empty queue even though mining was working.
+    """
+    tag = _slug(niche)[:20]
+    used = set()
+    if not tag:
+        return used
+    for t in load_generated():
+        if tag in str(t.get("id", "")):
+            v = t.get("mined_from")
+            if v:
+                used.add(_norm_niche(v))
+    return used
 
 
 def _build_from_repo_niche(lang):

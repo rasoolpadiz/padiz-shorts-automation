@@ -417,10 +417,21 @@ def fetch_captions(video, langs=CAPTION_LANGS):
         return ""
 
 
-def mine(niche, lang="fa", extra=""):
-    """Best source text for a repo niche. Returns dict or None."""
+def mine(niche, lang="fa", extra="", avoid=None):
+    """Best source text for a repo niche. Returns dict or None.
+
+    `avoid` is a set of normalized source titles already used for this niche.
+    A candidate whose title is in that set is skipped so the NEXT Short is a
+    different story - otherwise the same Wikipedia article is returned every
+    run and the topic_id never changes, so the pipeline refuses it as a repeat.
+    """
     query = build_query(niche, lang, extra)
-    _log(f"[mine] niche={niche!r} query={query!r}")
+    avoid = {_norm_word(a) for a in (avoid or set()) if a}
+    _log(f"[mine] niche={niche!r} query={query!r}"
+         + (f" avoid={len(avoid)}" if avoid else ""))
+
+    def _seen(title):
+        return _norm_word(title) in avoid if (title and avoid) else False
 
     videos, news = [], []
     try:
@@ -441,6 +452,9 @@ def mine(niche, lang="fa", extra=""):
     # 1) best video with captions
     best = pick_best(videos)
     text, source_url, views, src_title = "", "", 0, ""
+    if best and _seen(best.get("title")):
+        _log("[mine] best video already used for this niche - skipping")
+        best = None
     if best:
         src_title = str(best.get("title") or "")
         views = int(best.get("view_count") or 0)
@@ -451,6 +465,8 @@ def mine(niche, lang="fa", extra=""):
         # dead caption track -> next-best candidate
         if not text:
             for alt in sorted(videos, key=lambda v: -(v.get("view_count") or 0))[1:4]:
+                if _seen(alt.get("title")):
+                    continue
                 t = fetch_captions(alt, langs)
                 if t:
                     best, text, views = alt, t, int(alt.get("view_count") or 0)
@@ -465,7 +481,7 @@ def mine(niche, lang="fa", extra=""):
         try:
             for term in (query, str(niche).strip()):
                 wiki = search_wikipedia(term, lang)
-                if wiki:
+                if wiki and not _seen(wiki["title"]):
                     src_title = wiki["title"]
                     source_url = wiki["url"] or f"https://{lang}.wikipedia.org/wiki/{query}"
                     text = wiki["text"]
@@ -477,6 +493,8 @@ def mine(niche, lang="fa", extra=""):
     if not text:
         try:
             for hit in (search_reddit(query, lang) or [])[:2]:
+                if _seen(hit.get("title")):
+                    continue
                 src_title = hit["title"] or query
                 source_url = hit["url"]
                 text = hit["text"]
@@ -488,6 +506,8 @@ def mine(niche, lang="fa", extra=""):
     if not text:
         try:
             for hit in (search_hackernews(query) or [])[:2]:
+                if _seen(hit.get("title")):
+                    continue
                 src_title = hit["title"] or query
                 source_url = hit["url"]
                 text = hit["text"]
@@ -498,9 +518,10 @@ def mine(niche, lang="fa", extra=""):
 
     # 3) last resort: the best news article
     if not text and news:
-        src_title, source_url = news[0].get("title", ""), news[0].get("url", "")
+        fresh = [n for n in news if not _seen(n.get("title"))] or news
+        src_title, source_url = fresh[0].get("title", ""), fresh[0].get("url", "")
         try:
-            html = _download(news[0]["url"])
+            html = _download(fresh[0]["url"])
             body = _html_to_text(html)
             text = body
             _log(f"[mine] article body used ({len(body.split())} words)")

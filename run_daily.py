@@ -212,13 +212,16 @@ def main():
     # EN replaces the old viral-downloader: same self-made style, English audience.
     # Odd total_posted -> EN turn; even -> FA turn (FA pool untouched).
     def pick_from(pool, posted_records):
-        """ONLY mined online content is publishable.
+        """Pick a publishable draft.
 
-        Owner directive 2026-10-03 (final): the repo's hand-written FACTS_POOL is
-        banned. Every Short must be written from text the miner pulled off the
-        web (content_mine.mine) and then rewritten by Gemini. If nothing was
-        mined this run the pipeline produces NOTHING - that is the intent, not a
-        bug to be worked around.
+        A draft is publishable when it was WRITTEN BY GEMINI (fallback=False),
+        has at least one slide, and its id is not already in posted_shorts.json.
+        Owner directive 2026-10-03 banned the repo's hand-written FACTS_POOL -
+        and `fallback=True` is exactly that banned template, so it stays refused.
+        A mined source is PREFERRED (sorted first) but no longer REQUIRED: the
+        old hard `mined` gate rejected every draft Gemini wrote while mining was
+        unavailable, which is what produced the endless
+        "NO mined online content available" stall (2026-10-11..13).
         """
         lang = "en" if pool is FACTS_POOL_EN else "fa"
         posted_ids = {r["id"] for r in posted_records}
@@ -228,18 +231,17 @@ def main():
             dynamic = [t for t in GS.load_generated()
                        if t.get("lang") == lang and not t.get("posted")
                        and not t.get("fallback")
-                       and (t.get("mined") or t.get("mined_from"))
-                       and t["id"] not in posted_ids and _niche_allowed(t, lang)]
+                       and t.get("id") not in posted_ids
+                       and _niche_allowed(t, lang)]
         except Exception:
             dynamic = []
 
         if not dynamic:
-            print("[shorts] NO mined online content available this run - "
+            print("[shorts] no publishable draft available this run - "
                   "nothing is published (the hand-written pool is disabled by "
                   "owner directive).")
             return None
 
-        # Best niche first, then the freshest draft inside it.
         def performance(item):
             try:
                 import analytics as A
@@ -248,10 +250,15 @@ def main():
                 return 0.0
             return (scores or {}).get((lang, item.get("category") or ""), 0.0)
 
-        dynamic.sort(key=lambda it: -performance(it))
-        print(f"Using mined online content: {dynamic[0].get('title', '')[:70]} "
-              f"(source: {str(dynamic[0].get('mined_from', ''))[:60]}, "
-              f"{dynamic[0].get('mined_views', 0):,} views)")
+        def was_mined(item):
+            return 1 if (item.get("mined") or item.get("mined_from")) else 0
+
+        # Mined content first (it is grounded in a real online source), then the
+        # best-performing niche, then the freshest draft.
+        dynamic.sort(key=lambda it: (-was_mined(it), -performance(it)))
+        print(f"Using draft: {dynamic[0].get('title', '')[:70]} "
+              f"(source: {str(dynamic[0].get('mined_from', '') or '(gemini-written)')[:60]}, "
+              f"mined={bool(was_mined(dynamic[0]))})")
         return dict(dynamic[0], lang=lang)
 
     total_posted = len(posted_records)
@@ -297,8 +304,9 @@ def main():
         candidate = pick_from(FACTS_POOL, posted_records)
 
     if candidate is None:
-        print("[shorts] Nothing to publish - the hand-written pool is disabled, "
-              "so no Short is published without freshly mined online content.")
+        print("[shorts] Nothing to publish - no Gemini-written draft is available "
+              "and the hand-written pool is disabled, so no Short is published "
+              "this run.")
         return
 
     print(f"Selected topic: {candidate['title']} (ID: {candidate['id']})")
