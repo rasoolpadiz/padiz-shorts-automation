@@ -2,10 +2,15 @@
 
 Called by deploy/pull.sh with the snapshot directory as argv[1].
 
-The publish-state files are tracked in git, so `git reset --hard origin/main`
-replaces them with whatever the repo last saw. The server's copies are the
-authoritative record of what has already been published, so they are snapshotted
-before the sync and re-applied here.
+The publish-state files used to be tracked in git, so `git reset --hard
+origin/main` replaced them with whatever the repo last saw - and the server's
+copies are the authoritative record of what has already been published. They are
+now UNTRACKED (see .gitignore), which is the real fix: no reset can touch them.
+
+This module remains as the transition guard. On the first pull after they were
+untracked, git still deletes them (it removes a file that was tracked in the old
+commit), and this puts them back. Afterwards it is a no-op, because the files are
+untracked and the reset never touches them.
 
 This only ever ADDS. An entry present on the server but missing from the repo is
 kept, and an entry present in the repo but missing from the server is kept too.

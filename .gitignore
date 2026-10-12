@@ -53,6 +53,25 @@ voice_check/
 token_health.json
 mine_raw.txt
 
+# --- Live server state: MUST NOT be tracked -------------------------------
+# These files are written on the publishing server as videos go out, so they are
+# the authoritative record of what has been published and of the day's API
+# spend. Tracking them means ANY plain `git reset --hard` silently rewinds them:
+# the automation then re-uploads live videos, and the budget guard under-counts.
+# That is not hypothetical - it happened twice during this work, the second time
+# from a bare `git reset --hard` that bypassed deploy/pull.sh entirely.
+# Untracked, no reset can touch them at all.
+#
+# discovery_pool.json and analytics_history.json stay TRACKED on purpose: they
+# are produced by the GitHub Actions analytics job, which is the freshest source.
+posted_shorts.json
+longform_out/posted_long.json
+discovery_quota.json
+trend_pool.json
+yt_budget.json
+shorts_generated/
+topics_generated/
+
 # --- Per-run render artifacts: MUST NOT be tracked -------------------------
 # These are produced during a run and deleted by cleanup_artifacts.py after a
 # successful upload. Tracking them defeats that completely: git restores every
