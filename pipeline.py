@@ -189,9 +189,9 @@ def detect_shorts_mood(category: str, title: str = "", text: str = "") -> str:
 def shorts_theme(category: str, title: str, text: str, lang: str = None):
     """Resolve the Shorts palette for one slide. Returns (THEME, en_mode, mood).
 
-    Extracted from create_slide_image so the caption renderer draws in the SAME
-    colours as the slide it sits on (accent = mood accent). The FA branch is the
-    legacy look and must stay pixel-identical.
+    Extracted from create_slide_image so the subtitle renderer draws in the SAME
+    colours as the slide it sits on (body = the slide's own body colour). The FA
+    branch is the legacy look and must stay pixel-identical.
     """
     # Theme per language: FA keeps the EXACT legacy look, EN gets its own
     # identity so viewers instantly tell them apart on the channel grid.
@@ -242,10 +242,9 @@ def shorts_theme(category: str, title: str, text: str, lang: str = None):
     THEME["topbar"] = _mood["topbar"]
     THEME["progress"] = _mood["accent"]
     THEME["divider"] = _mood["accent"]
-    # The raw mood accent, kept separate from the tinted fields above. The
-    # caption renderer highlights the spoken word with this: "topbar" is the
-    # darkened variant meant to sit behind a 24px bar and reads as near-invisible
-    # on the navy card, whereas this one is the bright version.
+    # The raw mood accent, kept separate from the tinted fields above: "topbar"
+    # is the darkened variant meant to sit behind a 24px bar, whereas this one is
+    # the bright version. Used by the card's own accents (divider, progress).
     THEME["accent"] = _mood["accent"]
     THEME["_mood"] = mood
     return THEME, en_mode, mood
@@ -254,9 +253,9 @@ def shorts_theme(category: str, title: str, text: str, lang: str = None):
 def create_slide_image(category: str, title: str, text: str, slide_num: int, total_slides: int, output_path: str, lang: str = None, captions_on: bool = False):
     """Draw one Shorts slide.
 
-    captions_on=True suppresses the static body block, because the animated
-    captions are rendered INTO that space (see captions.py). Leaving the body
-    text in place would put two competing blocks of Persian text on screen.
+    captions_on=True suppresses the static body block, because the subtitle is
+    rendered INTO that space (see captions.py). Leaving the body text in place
+    would put two competing blocks of Persian text on screen.
     """
     THEME, en_mode, _mood = shorts_theme(category, title, text, lang)
 
@@ -991,10 +990,11 @@ def build_full_short(topic_data: dict, output_filename: str):
             voice = slide.get("voice") or lang_voices[(base_voice_idx + idx - 1) % len(lang_voices)]
             generate_voice(slide["speech"], voice, audio_paths[idx - 1])
 
-    # Word-by-word captions. ON by default because they are the single biggest
-    # retention lever on a Short; SHORTS_CAPTIONS=0 restores the old static body
-    # text. Each slide is rendered as one PNG per spoken word and fed to ffmpeg
-    # as a timed concat list (see captions.py).
+    # Plain static subtitles. ON by default; SHORTS_CAPTIONS=0 restores the
+    # slide's own static body text instead. Each slide is rendered as one PNG per
+    # caption chunk and fed to ffmpeg as a timed concat list (see captions.py).
+    # The karaoke highlight was removed on 2026-10-14 - it read as an animation
+    # rather than a subtitle.
     CAP = None
     try:
         import captions as CAP
@@ -1004,7 +1004,7 @@ def build_full_short(topic_data: dict, output_filename: str):
         print(f"[caption] unavailable ({_e}) - using static slides")
         CAP = None
     if CAP:
-        print("[caption] word-by-word captions ON (set SHORTS_CAPTIONS=0 to disable)")
+        print("[caption] plain static subtitles ON (set SHORTS_CAPTIONS=0 to disable)")
 
     for idx, slide in enumerate(slides, start=1):
         img_path = os.path.join(work_dir, f"slide_{idx}.png")

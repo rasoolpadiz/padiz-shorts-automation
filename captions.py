@@ -1,10 +1,11 @@
-"""Word-by-word animated captions for Shorts.
+"""Plain, static subtitles for Shorts.
 
-Owner directive 2026-10-13: on a vertical Short the single biggest retention
-lever is the viewer being able to READ what is being said. Big captions that
-highlight the word currently being spoken ("karaoke") hold attention far better
-than a static text block, because the eye is given something to track every
-~300 ms instead of one change per slide.
+Owner directive 2026-10-14: the karaoke treatment shipped in 480ad9c (the spoken
+word drawn larger and in the mood accent colour, sweeping across the line) reads
+as a distracting animation rather than a subtitle. The subtitle is now PLAIN:
+one ordinary line of body text, drawn exactly the way the slide draws its own
+body copy - no highlight, no colour change, no size change, nothing inside a line
+ever moves.
 
 How it works
 ------------
@@ -12,16 +13,15 @@ How it works
    narration duration is distributed over the words, weighted by how long each
    word takes to say: its length plus a pause allowance for trailing
    punctuation. This is the same proportional model longform.build_scene_srt
-   already uses, refined from per-chunk to per-word.
+   already uses.
 2. Words are grouped into small chunks (2-4 words) that fit on one line.
-3. ONE PNG is rendered per SPOKEN WORD. The chunk stays on screen while the
-   highlight sweeps across it, and the active word is drawn larger and in the
-   mood accent colour - the "pop".
+3. ONE PNG is rendered per CHUNK. The chunk stays on screen for exactly as long
+   as its words take to say, then the next chunk simply replaces it.
 4. The frames are handed to ffmpeg as a concat list with explicit per-frame
    durations, so no alpha channel or overlay filter is involved: each frame is a
    complete 1080x1920 picture.
 
-Persian shaping is delegated to pipeline.draw_persian / pipeline.prepare_bidi_text,
+Persian shaping is delegated to pipeline.draw_smart / pipeline.prepare_bidi_text,
 so this module inherits the exact same libraqm-vs-arabic_reshaper decision as the
 rest of the renderer and can never disagree with the slide underneath.
 """
@@ -34,11 +34,9 @@ import pipeline as P
 # --- Tunables ---------------------------------------------------------------
 # One caption line. Big is the point: this is read on a phone.
 BASE_SIZE = 76
-POP_SIZE = 88           # the active word
 MIN_SIZE = 44
 MAX_WORDS_PER_CHUNK = 4
 MIN_WORDS_PER_CHUNK = 2
-LINE_GAP_FACTOR = 0.30  # gap between words, as a fraction of the font size
 CAPTION_CY = 1055       # vertical centre of the caption line, inside the card
 MIN_STATE = 0.12        # never emit a frame shorter than this (1-frame flicker)
 
@@ -124,10 +122,8 @@ def fit_chunks(draw, words, duration, max_width):
     while True:
         font = P.font_for(" ".join(words[:1]) or "x", size)
         chunks = chunk_words(timed, draw, font, max_width)
-        gap = size * LINE_GAP_FACTOR
         widest = max(
-            (sum(_measure_word(draw, c[0], font) for c in ch) + gap * max(len(ch) - 1, 0)
-             for ch in chunks),
+            (_line_width(draw, " ".join(c[0] for c in ch), font) for ch in chunks),
             default=0.0,
         )
         if widest <= max_width or size <= MIN_SIZE:
@@ -136,62 +132,26 @@ def fit_chunks(draw, words, duration, max_width):
 
 
 # --- Drawing ----------------------------------------------------------------
-def _draw_word(draw, xy, word, font, fill, anchor, stroke=0):
-    """One Persian/Latin word. Mirrors pipeline.draw_persian but adds an outline,
-    which is what makes the text readable over any slide background."""
-    kwargs = {"font": font, "fill": fill, "anchor": anchor}
-    if P.HAS_RAQM:
-        # Direction is per word: a single Latin word must not be treated as RTL.
-        kwargs["direction"] = "rtl" if P.is_fa_text(word) else "ltr"
-        kwargs["language"] = "fa" if P.is_fa_text(word) else "en"
-    if stroke:
-        kwargs["stroke_width"] = stroke
-        kwargs["stroke_fill"] = (0, 0, 0)
-    draw.text(xy, P.prepare_bidi_text(word), **kwargs)
+def _line_width(draw, text, font):
+    return P._measure(draw, P.prepare_bidi_text(text), font)
 
 
-def _measure_word(draw, word, font):
-    return P._measure(draw, P.prepare_bidi_text(word), font)
+def layout_line(draw, text, size, fill):
+    """Draw one plain caption line, centred.
 
-
-def layout_line(draw, words, active_i, base_size, en_mode, sample, accent):
-    """Draw one caption line with `active_i` popped.
-
-    The words are laid out by hand instead of as a single string because the
-    active word needs its own font size and colour. Persian runs right-to-left,
-    so the first logical word is placed at the RIGHT edge and the cursor walks
-    leftwards; English mirrors that.
+    Deliberately nothing more than the slide's own body copy: one font, one size,
+    one colour for the whole line. pipeline.draw_smart does the Persian shaping
+    and RTL ordering and the centre anchor, so the subtitle can never disagree
+    with the typography of the card it sits on.
     """
-    fonts = [P.font_for(sample, base_size)] * len(words)
-    if 0 <= active_i < len(fonts):
-        fonts[active_i] = P.font_for(sample, POP_SIZE)
-
-    widths = [_measure_word(draw, w, f) for w, f in zip(words, fonts)]
-    gap = base_size * LINE_GAP_FACTOR
-    total = sum(widths) + gap * max(len(words) - 1, 0)
-
-    cx, cy = 1080 // 2, CAPTION_CY
-    stroke = max(3, base_size // 14)
-
-    if en_mode:
-        x = cx - total / 2.0
-        for i, (w, f, wd) in enumerate(zip(words, fonts, widths)):
-            _draw_word(draw, (x, cy), w, f,
-                       accent if i == active_i else (255, 255, 255), "lm", stroke)
-            x += wd + gap
-    else:
-        x = cx + total / 2.0
-        for i, (w, f, wd) in enumerate(zip(words, fonts, widths)):
-            _draw_word(draw, (x, cy), w, f,
-                       accent if i == active_i else (255, 255, 255), "rm", stroke)
-            x -= wd + gap
-    return total
+    font = P.font_for(text, size)
+    P.draw_smart(draw, (1080 // 2, CAPTION_CY), text, font, fill, anchor="mm")
 
 
 # --- Frame production -------------------------------------------------------
 def build_frames(slide_png, speech, audio_duration, out_dir, tag,
                  category="", title="", text="", lang=None):
-    """Render one PNG per spoken word for a single slide.
+    """Render one PNG per caption chunk for a single slide.
 
     Returns [(png_path, seconds)] in play order, or None when captions cannot be
     produced (in which case the caller keeps the plain static-image clip).
@@ -208,8 +168,10 @@ def build_frames(slide_png, speech, audio_duration, out_dir, tag,
         return None
 
     probe = ImageDraw.Draw(base)
-    theme, en_mode, _mood = P.shorts_theme(category, title, text, lang)
-    accent = tuple(theme.get("accent") or theme.get("topbar") or (240, 180, 41))
+    theme, _en_mode, _mood = P.shorts_theme(category, title, text, lang)
+    # The subtitle is drawn in the slide's own body colour, so it reads as "the
+    # text of the card" rather than as an overlay in a style of its own.
+    fill = tuple(theme.get("body") or (241, 245, 249))
     # 120px of side padding, not the 90px the slide uses: the slide card border
     # sits at 70px, so a caption allowed to reach 90px would run into it.
     safe_w = 1080 - 2 * 120
@@ -219,14 +181,15 @@ def build_frames(slide_png, speech, audio_duration, out_dir, tag,
     os.makedirs(out_dir, exist_ok=True)
     frames = []
     for ci, chunk in enumerate(chunks):
-        chunk_text = [c[0] for c in chunk]
-        for wi, (word, start, end) in enumerate(chunk):
-            frame = base.copy()
-            layout_line(ImageDraw.Draw(frame), chunk_text, wi, base_size,
-                        en_mode, " ".join(chunk_text), accent)
-            path = os.path.join(out_dir, f"cap_{tag}_{ci:02d}_{wi:02d}.png")
-            frame.save(path)
-            frames.append((path, max(end - start, MIN_STATE)))
+        # One frame per chunk: it holds the screen for exactly as long as its
+        # words take to say, then the next chunk replaces it. Nothing animates.
+        line = " ".join(c[0] for c in chunk)
+        span = chunk[-1][2] - chunk[0][1]
+        frame = base.copy()
+        layout_line(ImageDraw.Draw(frame), line, base_size, fill)
+        path = os.path.join(out_dir, f"cap_{tag}_{ci:02d}.png")
+        frame.save(path)
+        frames.append((path, max(span, MIN_STATE)))
 
     return frames or None
 
@@ -252,7 +215,7 @@ def write_concat_list(frames, out_path, tail=0.0):
 
 
 def enabled():
-    """Captions are ON by default; set SHORTS_CAPTIONS=0 to go back to the
-    static body text."""
+    """Subtitles are ON by default; set SHORTS_CAPTIONS=0 to go back to the
+    slide's own static body text (one block per slide, never changing)."""
     return (os.environ.get("SHORTS_CAPTIONS", "1") or "1").strip().lower() not in (
         "0", "false", "no", "off")
