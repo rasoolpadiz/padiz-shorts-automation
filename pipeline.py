@@ -966,13 +966,19 @@ def _ffmpeg_quiet(cmd):
 
 
 def _clip_from_concat(lst_path, audio_path, duration, clip_path):
-    """Timed subtitle clip: one pre-rendered frame per caption chunk."""
+    """Timed subtitle clip: one pre-rendered frame per caption chunk.
+
+    NO `-vsync vfr` here. Measured on the server (ffmpeg 5.1.9) against a 5-frame
+    list totalling 8.10s: vfr produced a 6.40s clip, constant frame rate produced
+    7.76s (7.70s narration + the 0.4s tail, i.e. correct). The truncated clip made
+    every slide fail the timing check and fall back to a static subtitle - which
+    is exactly the "sometimes there is no subtitle" report that started all this.
+    """
     _ffmpeg_quiet([
         "ffmpeg", "-y",
         "-f", "concat", "-safe", "0", "-i", lst_path,
         "-i", audio_path,
         "-t", f"{duration:.2f}",
-        "-vsync", "vfr",
         "-pix_fmt", "yuv420p",
         "-c:v", "libx264", "-tune", "stillimage", "-preset", "fast", "-crf", "18",
         "-c:a", "aac", "-b:a", "192k", "-shortest",
