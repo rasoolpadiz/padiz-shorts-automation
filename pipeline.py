@@ -1133,12 +1133,13 @@ def build_full_short(topic_data: dict, output_filename: str):
                     frames, os.path.join(work_dir, f"cap_{idx}.txt"), tail=0.4)
                 _clip_from_timed_overlay(img_path, lst, audio_path, duration, clip_path)
                 built = True
-                # The invariant is that the clip covers the narration. Comparing
-                # against `duration` would be wrong: -shortest cuts the output at
-                # the audio, so the +0.4s tail never reaches the file.
+                # The invariant is that the clip covers the narration and does not
+                # overshoot the tail: with the overlay path the clip ends at the
+                # caption stream (speech_dur + 0.4), so it is compared against that
+                # window rather than against the narration alone.
                 got = get_audio_duration(clip_path)
-                if abs(got - speech_dur) > 0.5:
-                    print(f"[caption] slide {idx} timing off ({got:.2f}s vs "
+                if not (speech_dur - 0.15 <= got <= duration + 0.25):
+                    print(f"[caption] slide {idx} timing off ({got:.2f}s for "
                           f"{speech_dur:.2f}s narration)")
                     built = False
                 elif not _caption_on_screen(clip_path, duration, card_fill, f"{idx:02d}"):
