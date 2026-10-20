@@ -73,10 +73,22 @@
       ]
     }
   },
+  "watermark": {
+    "enabled": true,
+    "text": "@padiz_studio",
+    "position": "top",
+    "margin_pct": 5.0,
+    "font_pct": 2.6,
+    "opacity": 0.88,
+    "preset": "veryfast",
+    "crf": 23,
+    "on_error": "skip"
+  },
   "filters": {
     "max_duration_sec": 180,
     "min_views": 0,
-    "skip_live": true
+    "skip_live": true,
+    "require_vertical": true
   },
   "download": {
     "max_height": 1080,

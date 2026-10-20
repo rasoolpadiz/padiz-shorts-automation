@@ -54,7 +54,12 @@ from shortsdl.discover import discover_market  # noqa: E402
 from shortsdl.downloader import Downloader  # noqa: E402
 from shortsdl.utils import read_json, setup_logging, write_json  # noqa: E402
 
-LOG = logging.getLogger("repost")
+import watermark  # noqa: E402  (مهر زدن آدرس کانال روی ویدیو)
+
+# Child of the "shortsdl" logger on purpose: utils.setup_logging() configures
+# "shortsdl" and its children, so a bare logging.getLogger("repost") would write
+# to a logger with no handler and every message here would vanish from the log.
+LOG = logging.getLogger("shortsdl.repost")
 
 STATE_PATH = BASE_DIR / "repost_posted.json"
 DEFAULT_PER_DAY = 2
@@ -192,8 +197,32 @@ def collect_candidates(markets: list[str], cfg: dict, skip: set[str], need: int)
     return out
 
 
-def download_for(market: str, items: list[dict], cfg: dict, outdir: Path, need: int):
-    """از لیست مرتب‌شده، تا رسیدن به `need` فایل موفق دانلود می‌کند."""
+def _find_orphan_watermarked(folder: Path, video_id: str) -> Path | None:
+    """نسخه‌ی مهرخورده‌ای که از اجرای قبلی جا مانده را پیدا می‌کند.
+
+    سناریوی واقعی: پروسه بین «مهر زدن» و «آپلود» کشته شود (یا سرور ری‌استارت
+    شود). فایل اصلی پاک شده، `<id>_wm.mp4` مانده و شناسه در آرشیو yt-dlp ثبت
+    است. آن‌وقت `_find_existing` فایل اصلی را پیدا نمی‌کند و آرشیو هم اجازه‌ی
+    دانلود دوباره نمی‌دهد → آن روز هیچ ریپاستی منتشر نمی‌شد. با این تابع، فایل
+    مهرخورده دوباره استفاده می‌شود.
+    """
+    for p in folder.glob(f"*_{video_id}_wm.*"):
+        if p.suffix.lower() in (".mp4", ".webm", ".mkv") and p.stat().st_size > 1024:
+            return p
+    return None
+
+
+def download_usable(market: str, items: list[dict], cfg: dict, outdir: Path,
+                    need: int, require_vertical: bool = True,
+                    max_attempts: int = 10):
+    """یک‌به‌یک دانلود می‌کند تا `need` فایل قابل‌قبول جمع شود.
+
+    چرا یکی‌یکی و نه دسته‌ای؟ جست‌وجوی «Shorts» تضمین نمی‌کند ویدیو عمودی باشد —
+    تست واقعی: اولین نتیجه‌ی ترند یک تریلر افقی ۱۹۲۰x۱۰۸۰ بود. اگر دو تا را با
+    هم می‌گرفتیم، هر دو دور ریخته می‌شدند و باید از اول دانلود می‌کردیم. حالا
+    هر کاندید دانلود می‌شود، ابعادش چک می‌شود و اگر افقی بود همان‌جا حذف و
+    سراغ بعدی می‌رویم (پهنای باندِ فقط یک ویدیوی اضافه).
+    """
     dcfg = cfg.get("download", {})
     dl = Downloader(
         dcfg,
@@ -202,15 +231,42 @@ def download_for(market: str, items: list[dict], cfg: dict, outdir: Path, need: 
         cookies=dcfg.get("cookies_file"),
     )
     folder = outdir / market
-    results = dl.download_all(
-        items,
-        folder,
-        workers=int(dcfg.get("workers", 3)),
-        sleep_between=float(dcfg.get("sleep_between", 0.5)),
-        target=need,
-    )
-    ok = [r for r in results if r.get("file")]
-    return ok, folder
+    archive = outdir / ".download_archive.txt"
+    got: list[dict] = []
+    attempts = 0
+
+    for item in items:
+        if len(got) >= need or attempts >= max_attempts:
+            break
+        attempts += 1
+
+        orphan = _find_orphan_watermarked(folder, str(item["id"]))
+        if orphan:
+            LOG.info("نسخه‌ی مهرخورده‌ی قبلی استفاده شد: %s", orphan.name)
+            got.append({"id": item["id"], "rank": len(got) + 1, "item": item,
+                        "file": str(orphan), "size": orphan.stat().st_size,
+                        "error": None, "skipped": True})
+            continue
+
+        results = dl.download_all([item], folder, workers=1,
+                                  sleep_between=0, target=1)
+        res = next((r for r in results if r.get("file")), None)
+        if not res:
+            continue
+
+        if require_vertical:
+            w, h = watermark.probe_size(res["file"])
+            if h < w:
+                LOG.info("رد شد (افقی %dx%d): %s", w, h, item.get("id"))
+                # از آرشیو درش می‌آوریم تا اگر بعداً خواستیم دوباره دیده شود
+                unarchive(archive, str(item["id"]))
+                cleanup_file(res["file"])
+                continue
+
+        got.append(res)
+
+    LOG.info("[%s] %d فایل قابل‌استفاده از %d تلاش", market, len(got), attempts)
+    return got, folder
 
 
 # --------------------------------------------------------------------------- #
@@ -227,17 +283,6 @@ def verify_token() -> tuple[bool, str]:
         return (True, channel) if ok else (False, err)
     except Exception as exc:  # noqa: BLE001
         return False, f"token check unavailable: {exc}"
-
-
-def _mimetype_for(path: str) -> str:
-    """فقط برای لاگ — انتخاب واقعی MIME داخل pipeline.upload_to_youtube است."""
-    return {
-        ".mp4": "video/mp4",
-        ".m4v": "video/mp4",
-        ".mov": "video/quicktime",
-        ".webm": "video/webm",
-        ".mkv": "video/x-matroska",
-    }.get(Path(path).suffix.lower(), "video/mp4")
 
 
 def upload_one(file_path: str, item: dict, rcfg: dict) -> str | None:
@@ -267,6 +312,9 @@ def cleanup_file(file_path: str) -> None:
     """فایل ویدیو و فایل‌های جانبی‌اش را پاک می‌کند (بدون آرشیو روی سرور)."""
     p = Path(file_path)
     stem_prefix = p.name.split("_", 1)[-1].rsplit(".", 1)[0]  # 01_<id> -> <id>
+    # نسخه‌ی مهرخورده «<id>_wm» نام دارد؛ همان شناسه را هدف بگیر تا فایل‌های
+    # جانبی (webp/info.json) هم پاک شوند و چیزی روی سرور نماند.
+    stem_prefix = re.sub(r"(_wm|-wm|_music)$", "", stem_prefix)
     for side in p.parent.glob(f"*{stem_prefix}*"):
         if side.is_file() and side.suffix.lower() in (".mp4", ".webm", ".mkv", ".m4a",
                                                       ".webp", ".jpg", ".json", ".part"):
@@ -302,6 +350,7 @@ def run(count: int, markets: list[str], dry_run: bool, no_upload: bool,
         force: bool, config_path: str | None = None) -> int:
     cfg = load_config(config_path)
     rcfg = cfg.get("repost", {}) or {}
+    wm_cfg = cfg.get("watermark", {}) or {}
     outdir = resolve_path(cfg.get("output_dir") or "repost_out")
     setup_logging(outdir / "logs", verbose=bool(os.environ.get("REPOST_VERBOSE")))
 
@@ -371,7 +420,10 @@ def run(count: int, markets: list[str], dry_run: bool, no_upload: bool,
             break
         need = todo - uploaded
         LOG.info("دانلود از بازار %s (هدف: %d فایل)...", market, need)
-        ok_results, folder = download_for(market, items, cfg, outdir, need)
+        ok_results, folder = download_usable(
+            market, items, cfg, outdir, need,
+            require_vertical=bool(cfg.get("filters", {}).get("require_vertical", True)),
+        )
         if not ok_results:
             LOG.warning("از بازار %s چیزی دانلود نشد — بازار بعدی.", market)
             continue
@@ -388,6 +440,17 @@ def run(count: int, markets: list[str], dry_run: bool, no_upload: bool,
                 LOG.info("[no-upload] آماده بود: %s (%s)", res["file"], item.get("id"))
                 uploaded += 1
                 continue
+
+            # مهر زدن لوگوی آدرس کانال — خواسته‌ی مالک: ویدیوی دانلودشده بدون
+            # لوگو منتشر نشود. فایل اصلی داخل watermark.apply پاک می‌شود، پس
+            # در هر لحظه فقط یک نسخه روی دیسک است.
+            if wm_cfg.get("enabled", True):
+                marked = watermark.apply(res["file"], wm_cfg)
+                if marked is None:
+                    LOG.error("مهر زدن شکست خورد (on_error=fail) — این ویدیو رد شد")
+                    cleanup_file(res["file"])
+                    continue
+                res["file"] = marked
 
             url = upload_one(res["file"], item, rcfg)
             if not url:

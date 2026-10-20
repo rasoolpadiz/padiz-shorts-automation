@@ -68,6 +68,24 @@ DEFAULT_CONFIG: dict = {
         "max_duration_sec": 180,
         "min_views": 0,
         "skip_live": True,
+        # Shorts must be vertical. Search with the "short" duration filter still
+        # returns landscape clips (a 1920x1080 trailer came back as result #1 on
+        # a real trending query), so repost.py re-checks the real dimensions
+        # after download and rejects anything wider than it is tall.
+        "require_vertical": True,
+    },
+    # Merged repost pipeline: the channel handle is burned onto every downloaded
+    # Short before upload (watermark.py).
+    "watermark": {
+        "enabled": True,
+        "text": "@padiz_studio",
+        "position": "top",
+        "margin_pct": 5.0,
+        "font_pct": 2.6,
+        "opacity": 0.88,
+        "preset": "veryfast",
+        "crf": 23,
+        "on_error": "skip",
     },
     "download": {
         "max_height": 1080,
