@@ -32,6 +32,34 @@ WIPE_DIRS = [
     "longform_images",   # cached scene photos for long videos
 ]
 
+# Merged repost pipeline (2026-10-20): downloaded Shorts are the biggest files
+# this repo ever holds, and repost.py already deletes each one right after a
+# successful upload. This sweeps whatever a crash/failed upload left behind,
+# while keeping the state + index + logs that make the run auditable.
+REPOST_DIR = "repost_out"
+REPOST_KEEP_SUFFIX = {".csv", ".json", ".txt", ".log"}
+REPOST_KEEP_NAMES = {".download_archive.txt", "candidates.json", "index.json",
+                     "index.csv", "report.html"}
+
+
+def clean_repost_out():
+    d = os.path.join(REPO, REPOST_DIR)
+    if not os.path.isdir(d):
+        return
+    for root, dirs, files in os.walk(d):
+        if os.path.basename(root) == "logs":
+            dirs[:] = []
+            continue
+        for name in files:
+            if name in REPOST_KEEP_NAMES:
+                continue
+            if os.path.splitext(name)[1].lower() in REPOST_KEEP_SUFFIX:
+                continue
+            try:
+                _rm(os.path.join(root, name))
+            except Exception as e:
+                print(f"  [skip] {name}: {e}")
+
 # Files inside longform_out to delete (all *.mp4, *.jpg thumbnails, per-topic
 # folders), EXCEPT posted_long.json which is the state file.
 def clean_longform_out():
@@ -88,6 +116,7 @@ def main():
         else:
             print(f"  (absent) {d}")
     clean_longform_out()
+    clean_repost_out()
     # leftover short_*.mp4 / short_*_music.mp4 at repo root
     for name in os.listdir(REPO):
         if name.endswith(".mp4"):

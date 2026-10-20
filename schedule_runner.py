@@ -37,6 +37,13 @@ TASK_PREFIX = 'PadizDaily'
 RUNNER_BAT = os.path.join(BASE_DIR, 'run_padiz_daily.bat')
 DEFAULT_TIMES = ['15:30', '21:00']
 
+# Merged pipeline (2026-10-20): every trigger first reposts the videos that the
+# shortsdl module found, then renders the self-made Persian Shorts. Both steps
+# share the 10,000-unit daily API budget (5 uploads max), so the Shorts loop was
+# lowered from 5 to 3 to match MAX_SHORTS_PER_DAY in run_daily.py.
+REPOST_PER_DAY = 2
+MAX_SHORTS = 3
+
 
 def _generate_bat(times_list):
     """Windows batch file برای اجرا."""
@@ -122,42 +129,53 @@ def remove_schedule():
 
 def run_today(dry_run=False):
     """
-    اجرای امروز:
-    - روز فرد: انگلیسی (فیلم بلند + شورت‌ها)
-    - روز زوج: فارسی (فیلم بلند + شورت‌ها)
-    
-    حداکثر 5 شورت در روز (owner directive 2026-10-01)
+    اجرای امروز — پروژه‌ی ادغام‌شده:
+      1) ریپاست: ویدیوهایی که shortsdl پیدا می‌کند (پیش‌فرض ۲ در روز)
+      2) شورت فارسی ساخته‌شده (تا سقف MAX_SHORTS و با احترام به بودجه‌ی API)
+
+    سقف کل آپلود روز ۵ است (۲ ریپاست + ۳ شورت) = ۸۰۰۰ از ۱۰۰۰۰ واحد.
     """
     day_of_month = date.today().day
     is_odd = day_of_month % 2 == 1
     lang = 'en' if is_odd else 'fa'
-    
+
     print(f"[padiz] امروز روز {day_of_month} است (زوج={not is_odd})")
     print(f"[padiz] زبان امروز: {lang}")
-    
+
     if dry_run:
         print("[padiz] (dry-run) اینجا اجرا می‌شود:")
-        print(f"  شورت‌های {lang} (حداکثر 5): python run_daily.py (x5)")
+        print(f"  ریپاست: python repost.py --count {REPOST_PER_DAY}")
+        print(f"  شورت‌ها: python run_daily.py (x{MAX_SHORTS})")
         return 0
-    
+
+    # مرحله ۱ — ریپاست (کشف + دانلود + آپلود)
+    print(f"\n[padiz] ریپاست (حداکثر {REPOST_PER_DAY} ویدیو)...")
+    result_repost = subprocess.run(
+        [sys.executable, 'repost.py', '--count', str(REPOST_PER_DAY)],
+        cwd=BASE_DIR
+    )
+    if result_repost.returncode != 0:
+        # شکست ریپاست نباید کل روز را متوقف کند؛ شورت‌ها مستقل ادامه می‌دهند.
+        print(f"[padiz] ⚠️  ریپاست ناموفق (exit {result_repost.returncode}) — ادامه با شورت‌ها")
+    else:
+        print("[padiz] ✅ مرحله ریپاست تمام شد")
+
+    # مرحله ۲ — شورت‌های فارسی/انگلیسی ساخته‌شده
     # ویدئوهای بلند غیرفعال شده‌اند - فقط شورت اجرا می‌شود.
-    # MAX_SHORTS had been deleted with the long-form block while its uses stayed
-    # behind, so this raised NameError before the first Short could run.
-    MAX_SHORTS = 5
     print(f"\n[padiz] شورت‌های {lang} (حداکثر {MAX_SHORTS})...")
-    
+
     for i in range(MAX_SHORTS):
         print(f"[padiz]   شورت {i+1}/{MAX_SHORTS}...")
         result_short = subprocess.run(
             [sys.executable, 'run_daily.py'],
             cwd=BASE_DIR
         )
-        
+
         if result_short.returncode != 0:
             print(f"[padiz] ⚠️  شورت {i+1} ناموفق، توقف")
             break
         print(f"[padiz] ✅ شورت {i+1} موفق")
-    
+
     print(f"\n[padiz] ✅ اجرای امروز تمام شد")
     return 0
 

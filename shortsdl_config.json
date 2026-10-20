@@ -1,0 +1,99 @@
+{
+  "output_dir": "repost_out",
+  "per_market_limit": 25,
+  "repost": {
+    "per_day": 2,
+    "markets": ["trending", "global"],
+    "privacy_status": "public",
+    "category_id": "24",
+    "keep_files": false,
+    "tags": ["shorts", "viral", "trending", "funny"],
+    "hashtags": ["shorts", "viral", "trending"],
+    "description_template": "{title}\n\n🎬 ویدیو از کانال اصلی: {channel}\n🔗 منبع: {source}\n\nبرای ویدیوهای بیشتر سابسکرایب کنید.\n\n{hashtags}"
+  },
+  "markets": {
+    "global": {
+      "label": "جهانی (Global)",
+      "region_code": "US",
+      "relevance_language": "en",
+      "sp": "CAMSAhgB",
+      "queries": [
+        "#shorts",
+        "shorts",
+        "satisfying video",
+        "cute animals",
+        "funny video",
+        "dance challenge",
+        "football skills",
+        "life hacks",
+        "asmr",
+        "magic tricks"
+      ]
+    },
+    "persian": {
+      "label": "فارسی (Persian)",
+      "region_code": "IR",
+      "relevance_language": "fa",
+      "sp": "CAMSAhgB",
+      "require_script": "persian",
+      "queries": [
+        "خنده دار",
+        "کلیپ خنده دار",
+        "طنز ایرانی",
+        "ویدیو خنده دار",
+        "شعر",
+        "آشپزی",
+        "حیوانات",
+        "سرگرمی",
+        "فان",
+        "کلیپ کوتاه"
+      ]
+    },
+    "trending": {
+      "label": "ترند جهانی (این هفته)",
+      "region_code": "US",
+      "relevance_language": "en",
+      "filters_sp": { "sort": "views", "upload": "week" },
+      "queries": [
+        "shorts",
+        "viral",
+        "trending",
+        "challenge",
+        "funny",
+        "dance",
+        "music",
+        "food",
+        "football",
+        "animals",
+        "satisfying",
+        "asmr",
+        "prank",
+        "magic",
+        "recipe"
+      ]
+    }
+  },
+  "filters": {
+    "max_duration_sec": 180,
+    "min_views": 0,
+    "skip_live": true
+  },
+  "download": {
+    "max_height": 1080,
+    "workers": 3,
+    "retries": 3,
+    "sleep_between": 1.0,
+    "cookies_file": null,
+    "proxy": null,
+    "player_clients": ["default", "android"],
+    "write_thumbnail": true,
+    "write_info_json": true
+  },
+  "discovery": {
+    "results_per_query": 25,
+    "request_delay": 0.3,
+    "search_workers": 4,
+    "overfetch": 3,
+    "cache_minutes": 30
+  }
+}

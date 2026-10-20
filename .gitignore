@@ -72,6 +72,14 @@ yt_budget.json
 shorts_generated/
 topics_generated/
 
+# --- Merged repost pipeline (project "yyy" / shortsdl) ----------------------
+# repost_posted.json is the "already published" record for downloaded Shorts -
+# same rule as posted_shorts.json: untracked, because a reset must never rewind
+# it (that would re-upload the same video to the channel).
+repost_posted.json
+# Downloads, logs, indexes and the yt-dlp archive are per-server state.
+repost_out/
+
 # --- Per-run render artifacts: MUST NOT be tracked -------------------------
 # These are produced during a run and deleted by cleanup_artifacts.py after a
 # successful upload. Tracking them defeats that completely: git restores every

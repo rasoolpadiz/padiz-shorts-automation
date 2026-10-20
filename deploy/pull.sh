@@ -35,9 +35,9 @@ BEFORE=$(git rev-parse --short HEAD 2>/dev/null || echo '?')
 #    If the snapshot cannot be taken, do NOT proceed: a reset without a usable
 #    snapshot is exactly how the publish record gets destroyed.
 rm -rf "$SNAP"
-mkdir -p "$SNAP/longform_out"
+mkdir -p "$SNAP/longform_out" "$SNAP/repost_out"
 snap_fail=0
-for f in posted_shorts.json longform_out/posted_long.json discovery_quota.json; do
+for f in posted_shorts.json longform_out/posted_long.json discovery_quota.json repost_posted.json repost_out/.download_archive.txt; do
   [ -f "$f" ] && { cp -a "$f" "$SNAP/$f" || snap_fail=1; }
 done
 for d in shorts_generated topics_generated; do
@@ -66,7 +66,7 @@ fi
 #    still deletes them (git removes a file that was tracked in the old commit).
 #    Anything the snapshot had that is now missing is copied straight back.
 restored=0
-for f in posted_shorts.json longform_out/posted_long.json discovery_quota.json; do
+for f in posted_shorts.json longform_out/posted_long.json discovery_quota.json repost_posted.json repost_out/.download_archive.txt; do
   if [ -f "$SNAP/$f" ] && [ ! -f "$REPO/$f" ]; then
     mkdir -p "$(dirname "$REPO/$f")"
     cp -a "$SNAP/$f" "$REPO/$f" && restored=$((restored + 1))

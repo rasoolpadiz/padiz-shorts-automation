@@ -31,6 +31,10 @@ import sys
 LIST_FILES = [
     "posted_shorts.json",
     "longform_out/posted_long.json",
+    # Merged repost pipeline: the record of which downloaded Shorts were already
+    # published. Losing it means re-uploading the same video (a duplicate on the
+    # channel), so it gets the same union treatment as posted_shorts.json.
+    "repost_posted.json",
 ]
 
 # Directories of generated drafts, merged by filename.
@@ -48,6 +52,10 @@ DIRS = [
 # the ledger is what lets discovery overspend the budget.
 SERVER_WINS = [
     "discovery_quota.json",
+    # yt-dlp's download archive (one "youtube <id>" line per file). Purely an
+    # efficiency file: without it an already-published id is re-downloaded and
+    # then correctly skipped by repost_posted.json - wasted bandwidth, no dupes.
+    "repost_out/.download_archive.txt",
 ]
 
 

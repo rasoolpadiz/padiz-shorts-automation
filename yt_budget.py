@@ -19,11 +19,11 @@ QUOTA_PATH = os.path.join(BASE_DIR, "discovery_quota.json")
 
 DAILY_BUDGET = int(os.environ.get("YT_DAILY_UNITS", "10000"))
 UPLOAD_COST = 1600            # videos.insert
-# Shorts-only channel (owner directive 2026-10-20): long-form is retired, so the
-# reservation now covers Shorts alone. Keep this equal to MAX_SHORTS_PER_DAY in
-# run_daily.py - reserving more starves discovery, reserving less risks running
-# out of units halfway through the day's uploads.
-UPLOADS_PER_DAY = int(os.environ.get("YT_UPLOADS_PER_DAY", "3"))
+# Merged pipeline (2026-10-20): the day now carries 2 repost uploads (shortsdl
+# finds them) + up to 3 self-made Shorts = 5 uploads. 5 * 1600 = 8000 units,
+# which leaves 2000 for discovery/retries; 6 would leave only 400 and one retry
+# would burn the day. Keep in sync with MAX_UPLOADS_PER_DAY in run_all_daily.py.
+UPLOADS_PER_DAY = int(os.environ.get("YT_UPLOADS_PER_DAY", "5"))
 SAFETY_UNITS = 800            # headroom for a retry or a late catch-up run
 
 # Cost of the endpoints the pipeline actually uses.
@@ -123,7 +123,8 @@ def _count_posted(path, key="posted_at"):
 def uploads_done_today():
     shorts = _count_posted(os.path.join(BASE_DIR, "posted_shorts.json"))
     longs = _count_posted(os.path.join(BASE_DIR, "longform_out", "posted_long.json"))
-    return shorts + longs
+    reposts = _count_posted(os.path.join(BASE_DIR, "repost_posted.json"))
+    return shorts + longs + reposts
 
 
 def remaining():
@@ -132,6 +133,19 @@ def remaining():
     reserved = max(0, left) * UPLOAD_COST
     free = DAILY_BUDGET - spent_today() - reserved - SAFETY_UNITS
     return max(0, free)
+
+
+def uploads_affordable():
+    """How many MORE uploads the unit budget still allows.
+
+    `remaining()` cannot answer this: it subtracts a reservation for every upload
+    still planned today, so with UPLOADS_PER_DAY=5 it reports ~1200 units and any
+    upload looks unaffordable - which is exactly how the merged repost pipeline
+    refused to publish anything on its first run. Uploads are paid for first, so
+    the question here is simply "units left, divided by the upload price".
+    """
+    free = DAILY_BUDGET - spent_today() - SAFETY_UNITS
+    return max(0, free // UPLOAD_COST)
 
 
 def can_spend(n):

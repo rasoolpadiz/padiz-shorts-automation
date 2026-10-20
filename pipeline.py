@@ -1306,7 +1306,25 @@ def mix_bg_music(video_path: str, lang: str = "", track: str = "") -> str:
     return video_path
 
 
-def upload_to_youtube(video_path: str, title: str, description: str, tags: list, privacy_status="public"):
+def _video_mimetype(path: str) -> str:
+    """MIME درست بر اساس پسوند فایل.
+
+    Merged repost pipeline downloads whatever yt-dlp produces; without ffmpeg the
+    file can stay .webm/.mkv. Labelling it video/mp4 anyway made YouTube reject
+    the insert with a confusing "invalid content type".
+    """
+    ext = os.path.splitext(str(path))[1].lower()
+    return {
+        ".mp4": "video/mp4",
+        ".m4v": "video/mp4",
+        ".mov": "video/quicktime",
+        ".webm": "video/webm",
+        ".mkv": "video/x-matroska",
+    }.get(ext, "video/mp4")
+
+
+def upload_to_youtube(video_path: str, title: str, description: str, tags: list, privacy_status="public",
+                      category_id: str = "27"):
     with open(TOKEN_PATH, "rb") as token_file:
         creds = pickle.load(token_file)
 
@@ -1317,7 +1335,7 @@ def upload_to_youtube(video_path: str, title: str, description: str, tags: list,
             "title": title,
             "description": description,
             "tags": tags,
-            "categoryId": "27"
+            "categoryId": str(category_id)
         },
         "status": {
             "privacyStatus": privacy_status,
@@ -1325,7 +1343,8 @@ def upload_to_youtube(video_path: str, title: str, description: str, tags: list,
         }
     }
 
-    media = MediaFileUpload(video_path, chunksize=-1, resumable=True, mimetype="video/mp4")
+    media = MediaFileUpload(video_path, chunksize=-1, resumable=True,
+                            mimetype=_video_mimetype(video_path))
     request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
 
     response = None

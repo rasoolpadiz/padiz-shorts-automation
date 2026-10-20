@@ -13,3 +13,6 @@ yt-dlp>=2025.05.22
 pynacl>=1.5.0
 bgutil-ytdlp-pot-provider>=2.0.0
 yt-dlp-getpot-wpc
+# Merged repost pipeline (shortsdl) needs a bundled ffmpeg for merging 1080p
+# video+audio and for remuxing to mp4; without it yt-dlp leaves .webm/.mkv.
+imageio-ffmpeg>=0.5.1
