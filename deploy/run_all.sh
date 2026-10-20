@@ -33,10 +33,30 @@ fi
 # The merge added the downloader to this venv. If a pull brought new
 # requirements and nobody ran pip, the run would publish nothing at all - so
 # install them here (once; afterwards the import succeeds and this is a no-op).
-if ! "$PY" -c "import yt_dlp" >/dev/null 2>&1; then
-  echo "[all] yt-dlp missing in the venv - installing requirements.txt" >> "$LOG"
+#
+# imageio_ffmpeg is checked alongside yt_dlp on purpose: transform.py needs a
+# bundled ffmpeg for the punch-in / card / audio-replace pass. Without it the
+# transform step returns None and EVERY repost is skipped - a silent "nothing
+# published today" that looks like a YouTube problem. Checking both here turns
+# that into a loud, self-healing log line.
+if ! "$PY" -c "import yt_dlp, imageio_ffmpeg" >/dev/null 2>&1; then
+  echo "[all] yt-dlp or imageio-ffmpeg missing - installing requirements.txt" >> "$LOG"
   "$PY" -m pip install -q -r "$REPO/requirements.txt" >> "$LOG" 2>&1 || \
     echo "[all] pip install failed - repost step will fail loudly" >> "$LOG"
+fi
+
+# Narration is what makes a repost count as a new work instead of a re-upload,
+# and edge-tts is blocked from some IP ranges (403 from Microsoft). Test it
+# once a day so the log shows the truth before the first repost is attempted.
+TTS_MARK="/opt/padiz/.tts_checked_$(date -u +%Y%m%d)"
+if [ ! -f "$TTS_MARK" ]; then
+  if nice -n 15 "$PY" transform.py --tts-test >> "$LOG" 2>&1; then
+    echo "[all] TTS OK - reposts will be narrated" >> "$LOG"
+  else
+    echo "[all] WARNING: TTS FAILED - narration.required=true means reposts will be SKIPPED" >> "$LOG"
+    echo "[all]          fix: set GEMINI_API_KEY in .env, or set narration.required=false" >> "$LOG"
+  fi
+  : > "$TTS_MARK" 2>/dev/null || true
 fi
 
 LOCK=/opt/padiz/run_all.lock
