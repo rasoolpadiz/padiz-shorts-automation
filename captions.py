@@ -249,12 +249,17 @@ def _caption_style(category, title, text, lang):
 
 # --- Frame production -------------------------------------------------------
 def build_frames(slide_png, speech, audio_duration, out_dir, tag,
-                 category="", title="", text="", lang=None):
+                 category="", title="", text="", lang=None, overlay=False):
     """Render one PNG per caption chunk for a single slide.
 
     Returns [(png_path, seconds)] in play order. It returns None ONLY when the
     slide image cannot be read or there is no text at all to show - never merely
     because the narration was short, which used to cost the video its subtitle.
+
+    overlay=True renders transparent 1080x1920 frames containing only the
+    caption, for the timed-overlay clip builder in pipeline.py. That path does
+    not depend on the concat demuxer for the OUTPUT duration, which is what
+    truncated the clips (see pipeline._clip_from_timed_overlay).
     """
     from PIL import Image, ImageDraw
 
@@ -262,10 +267,13 @@ def build_frames(slide_png, speech, audio_duration, out_dir, tag,
     if not words:
         return None
 
-    try:
-        base = Image.open(slide_png).convert("RGB")
-    except Exception:
-        return None
+    if overlay:
+        base = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
+    else:
+        try:
+            base = Image.open(slide_png).convert("RGB")
+        except Exception:
+            return None
 
     fill, safe_w = _caption_style(category, title, text, lang)
     dur = float(audio_duration or 0.0)

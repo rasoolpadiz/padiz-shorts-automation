@@ -965,21 +965,28 @@ def _ffmpeg_quiet(cmd):
                    stderr=subprocess.DEVNULL)
 
 
-def _clip_from_concat(lst_path, audio_path, duration, clip_path):
-    """Timed subtitle clip: one pre-rendered frame per caption chunk.
+def _clip_from_timed_overlay(slide_png, lst_path, audio_path, duration, clip_path):
+    """Timed subtitle clip: transparent caption frames over one looped slide.
 
-    NO `-vsync vfr` here. Measured on the server (ffmpeg 5.1.9) against a 5-frame
-    list totalling 8.10s: vfr produced a 6.40s clip, constant frame rate produced
-    7.76s (7.70s narration + the 0.4s tail, i.e. correct). The truncated clip made
-    every slide fail the timing check and fall back to a static subtitle - which
-    is exactly the "sometimes there is no subtitle" report that started all this.
+    Why not the concat demuxer for the whole picture (the old approach): the
+    concat stream's own duration does not survive the mux. Measured on the
+    server (ffmpeg 5.1.9) with a list totalling 8.10s: `-vsync vfr` produced
+    6.40s, and even without vfr the muxed clip came out 6.36s against a 7.03s
+    narration - so the timing check failed on almost every slide and the old
+    code then rebuilt an EMPTY card. That was the missing-subtitle bug.
+
+    Here the base image is looped (infinite), the caption frames drive the
+    overlay, and `-shortest` ends the clip exactly where the narration ends.
     """
     _ffmpeg_quiet([
         "ffmpeg", "-y",
+        "-loop", "1", "-i", slide_png,
         "-f", "concat", "-safe", "0", "-i", lst_path,
         "-i", audio_path,
         "-t", f"{duration:.2f}",
-        "-pix_fmt", "yuv420p",
+        "-filter_complex",
+        "[0:v][1:v]overlay=0:0:format=auto,scale=1080:1920,format=yuv420p[v]",
+        "-map", "[v]", "-map", "2:a",
         "-c:v", "libx264", "-tune", "stillimage", "-preset", "fast", "-crf", "18",
         "-c:a", "aac", "-b:a", "192k", "-shortest",
         clip_path,
@@ -1114,7 +1121,7 @@ def build_full_short(topic_data: dict, output_filename: str):
                 frames = CAP.build_frames(
                     img_path, slide.get("speech", ""), speech_dur, work_dir, f"{idx:02d}",
                     category=category, title=slide["title"], text=slide["text"],
-                    lang=topic_lang or None)
+                    lang=topic_lang or None, overlay=True)
             except Exception as e:
                 print(f"[caption] slide {idx} failed ({type(e).__name__}: {e}) - static slide")
                 frames = None
@@ -1124,7 +1131,7 @@ def build_full_short(topic_data: dict, output_filename: str):
             try:
                 lst = CAP.write_concat_list(
                     frames, os.path.join(work_dir, f"cap_{idx}.txt"), tail=0.4)
-                _clip_from_concat(lst, audio_path, duration, clip_path)
+                _clip_from_timed_overlay(img_path, lst, audio_path, duration, clip_path)
                 built = True
                 # The invariant is that the clip covers the narration. Comparing
                 # against `duration` would be wrong: -shortest cuts the output at
