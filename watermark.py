@@ -222,7 +222,11 @@ def apply(src: str, cfg: dict | None = None, out_path: str | None = None,
         out_path = str(Path(src).with_name(Path(src).stem + "_wm.mp4"))
 
     # عرض/ارتفاع باید زوج باشد وگرنه yuv420p خطا می‌دهد.
-    vf = (f"[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2[v0];"
+    # fps=30 عمدی است: بیشتر Shortsهای دانلودشده VFR (نرخ فریم متغیر) هستند
+    # چون با موبایل ضبط شده‌اند. خروجی VFR گاهی در صف ترنسکد یوتیوب گیر
+    # می‌کند و ویدیو ساعت‌ها روی «We're processing this video» می‌ماند.
+    # نرمال‌کردن به CFR این ریسک را حذف می‌کند.
+    vf = (f"[0:v]fps=30,scale=trunc(iw/2)*2:trunc(ih/2)*2[v0];"
           f"[v0][1:v]overlay={x}:{y}:format=auto[vout]")
     cmd = [
         ff, "-y", "-hide_banner", "-loglevel", "error",
