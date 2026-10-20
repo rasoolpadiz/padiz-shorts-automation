@@ -55,6 +55,7 @@ from shortsdl.downloader import Downloader  # noqa: E402
 from shortsdl.utils import read_json, setup_logging, write_json  # noqa: E402
 
 import curate  # noqa: E402   (فیلتر و امتیازدهی محتوا)
+import transform  # noqa: E402  (تبدیل به ویدیوی تازه: روایت + تدوین)
 import watermark  # noqa: E402  (مهر زدن آدرس کانال روی ویدیو)
 
 # Child of the "shortsdl" logger on purpose: utils.setup_logging() configures
@@ -204,15 +205,15 @@ def collect_candidates(markets: list[str], cfg: dict, skip: set[str], need: int)
 
 
 def _find_orphan_watermarked(folder: Path, video_id: str) -> Path | None:
-    """نسخه‌ی مهرخورده‌ای که از اجرای قبلی جا مانده را پیدا می‌کند.
+    """نسخه‌ی تبدیل/مهرخورده‌ای که از اجرای قبلی جا مانده را پیدا می‌کند.
 
     سناریوی واقعی: پروسه بین «مهر زدن» و «آپلود» کشته شود (یا سرور ری‌استارت
-    شود). فایل اصلی پاک شده، `<id>_wm.mp4` مانده و شناسه در آرشیو yt-dlp ثبت
-    است. آن‌وقت `_find_existing` فایل اصلی را پیدا نمی‌کند و آرشیو هم اجازه‌ی
-    دانلود دوباره نمی‌دهد → آن روز هیچ ریپاستی منتشر نمی‌شد. با این تابع، فایل
-    مهرخورده دوباره استفاده می‌شود.
+    شود). فایل اصلی پاک شده، `<id>_wm.mp4` یا `<id>_tr.mp4` مانده و شناسه در
+    آرشیو yt-dlp ثبت است. آن‌وقت `_find_existing` فایل اصلی را پیدا نمی‌کند و
+    آرشیو هم اجازه‌ی دانلود دوباره نمی‌دهد → آن روز هیچ ریپاستی منتشر نمی‌شد.
+    با این تابع، فایل آماده دوباره استفاده می‌شود.
     """
-    for p in folder.glob(f"*_{video_id}_wm.*"):
+    for p in folder.glob(f"*_{video_id}_*.*"):
         if p.suffix.lower() in (".mp4", ".webm", ".mkv") and p.stat().st_size > 1024:
             return p
     return None
@@ -311,7 +312,7 @@ def cleanup_file(file_path: str) -> None:
     stem_prefix = p.name.split("_", 1)[-1].rsplit(".", 1)[0]  # 01_<id> -> <id>
     # نسخه‌ی مهرخورده «<id>_wm» نام دارد؛ همان شناسه را هدف بگیر تا فایل‌های
     # جانبی (webp/info.json) هم پاک شوند و چیزی روی سرور نماند.
-    stem_prefix = re.sub(r"(_wm|-wm|_music)$", "", stem_prefix)
+    stem_prefix = re.sub(r"(_wm|_tr|-wm|_music)$", "", stem_prefix)
     for side in p.parent.glob(f"*{stem_prefix}*"):
         if side.is_file() and side.suffix.lower() in (".mp4", ".webm", ".mkv", ".m4a",
                                                       ".webp", ".jpg", ".json", ".part"):
@@ -348,6 +349,7 @@ def run(count: int, markets: list[str], dry_run: bool, no_upload: bool,
     cfg = load_config(config_path)
     rcfg = cfg.get("repost", {}) or {}
     wm_cfg = cfg.get("watermark", {}) or {}
+    tcfg = cfg.get("transform", {}) or {}
     outdir = resolve_path(cfg.get("output_dir") or "repost_out")
     setup_logging(outdir / "logs", verbose=bool(os.environ.get("REPOST_VERBOSE")))
 
@@ -458,10 +460,26 @@ def run(count: int, markets: list[str], dry_run: bool, no_upload: bool,
             uploaded += 1
             continue
 
-        # مهر زدن لوگوی آدرس کانال — خواسته‌ی مالک: ویدیوی دانلودشده بدون
-        # لوگو منتشر نشود. فایل اصلی داخل watermark.apply پاک می‌شود، پس
-        # در هر لحظه فقط یک نسخه روی دیسک است.
-        if wm_cfg.get("enabled", True):
+        # تبدیل به ویدیوی تازه — خواسته‌ی مالک برای امنیت درآمد: ریپاست خام
+        # محتوای بازاستفاده‌شده است و صلاحیت درآمدزایی را از بین می‌برد.
+        # transform خودش پلاک کانال را هم می‌نشاند، پس مسیر watermark جداگانه
+        # اجرا نمی‌شود (وگرنه دو بار کدگذاری و دو مهر می‌خورد).
+        if tcfg.get("enabled", True):
+            made = transform.build(
+                res["file"], item, tcfg,
+                niche=item.get("niche") or item.get("query"),
+            )
+            if not made:
+                LOG.error("تبدیل انجام نشد — این ویدیو آپلود نمی‌شود: %s",
+                          item.get("id"))
+                unarchive(outdir / ".download_archive.txt", str(item["id"]))
+                cleanup_file(res["file"])
+                continue
+            res["file"] = made
+            res["transformed"] = True
+        elif wm_cfg.get("enabled", True):
+            # مسیر قدیمی: فقط مهر زدن، بدون روایت/تدوین. فقط اگر transform
+            # در کانفیگ خاموش شده باشد به اینجا می‌رسیم.
             marked = watermark.apply(res["file"], wm_cfg)
             if marked is None:
                 LOG.error("مهر زدن شکست خورد (on_error=fail) — این ویدیو رد شد")

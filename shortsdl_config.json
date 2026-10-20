@@ -2,7 +2,7 @@
   "output_dir": "repost_out",
   "per_market_limit": 25,
   "repost": {
-    "per_day": 2,
+    "per_day": 1,
     "markets": [
       "trending"
     ],
@@ -20,7 +20,36 @@
       "viral",
       "trending"
     ],
-    "description_template": "{title}\n\n🎬 ویدیو از کانال اصلی: {channel}\n🔗 منبع: {source}\n\nبرای ویدیوهای بیشتر سابسکرایب کنید.\n\n{hashtags}"
+    "description_template": "{title}\n\n🎙 روایت و تدوین: پادیز استدیو\n🎬 منبع تصویر: {channel}\n🔗 لینک اصلی: {source}\n\nاین ویدیو با روایت و تدوین فارسی بازنشر شده است.\n\n{hashtags}"
+  },
+  "transform": {
+    "enabled": true,
+    "narration": {
+      "enabled": true,
+      "required": true,
+      "backends": [
+        "edge",
+        "gemini"
+      ],
+      "voice": "fa-IR-FaridNeural",
+      "rate": "+0%",
+      "delay_ms": 350
+    },
+    "visual": {
+      "punch_in": 1.1,
+      "hook_sec": 1.6,
+      "outro_sec": 1.9,
+      "fps": 30,
+      "brand": "PADIZ",
+      "handle": "@padiz",
+      "cta": "سابسکرایب کن"
+    },
+    "audio": {
+      "original_volume": 0.0
+    },
+    "crf": 22,
+    "preset": "veryfast",
+    "on_error": "next"
   },
   "watermark": {
     "enabled": true,

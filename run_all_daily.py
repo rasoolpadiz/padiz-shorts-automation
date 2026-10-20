@@ -7,8 +7,13 @@
 
 حالا هر دو در همین ریپو هستند و این فایل ترتیب درست اجرا را تضمین می‌کند:
 
-    مرحله ۱ — ریپاست: ۲ ویدیویی که shortsdl پیدا می‌کند دانلود و منتشر شود
-    مرحله ۲ — شورت فارسی: یک شورت ساخته‌شده‌ی خودمان (اگر سهمیه مانده باشد)
+    مرحله ۱ — شورت فارسی: محتوای ساخته‌شده‌ی خودمان (اولویت اول)
+    مرحله ۲ — ریپاست: حداکثر ۱ ویدیو، و فقط اگر سهمیه مانده باشد
+
+**ترتیب عوض شد (۲۰۲۶-۱۰-۲۱):** قبلاً ریپاست اول اجرا می‌شد. حالا شورت
+اصلی اول است، چون هدف درآمد است: یوتیوب کانالی را که عمده‌ی محتوایش
+بازنشر کار دیگران است در برنامه‌ی درآمدزایی قبول نمی‌کند. با این ترتیب،
+اگر سهمیه تنگ باشد، محتوای اصلی جای خودش را می‌گیرد و ریپاست کوتاه می‌آید.
 
 سقف مشترک: MAX_UPLOADS_PER_DAY (پیش‌فرض ۵). هر آپلود ۱۶۰۰ واحد از ۱۰۰۰۰
 واحد روزانه‌ی YouTube Data API را می‌خورد، پس ۵ آپلود = ۸۰۰۰ واحد و ۲۰۰۰
@@ -21,7 +26,7 @@ Usage
     python run_all_daily.py --only repost   # فقط ریپاست
     python run_all_daily.py --only shorts   # فقط شورت فارسی
     python run_all_daily.py --dry-run       # بدون آپلود (تست)
-    python run_all_daily.py --repost-count 2
+    python run_all_daily.py --repost-count 1
 """
 
 from __future__ import annotations
@@ -73,7 +78,7 @@ def _banner(title: str) -> None:
 
 
 def step_repost(count: int, dry_run: bool) -> int:
-    _banner(f"مرحله ۱ — ریپاست ({count} ویدیو)")
+    _banner(f"مرحله ۲ — ریپاست تبدیل‌شده ({count} ویدیو)")
     try:
         import repost
     except Exception as exc:  # noqa: BLE001
@@ -93,7 +98,7 @@ def step_repost(count: int, dry_run: bool) -> int:
 
 
 def step_shorts(dry_run: bool) -> int:
-    _banner("مرحله ۲ — شورت فارسی (ساخت خودمان)")
+    _banner("مرحله ۱ — شورت فارسی (ساخت خودمان)")
     if dry_run:
         _log("[shorts] dry-run: run_daily.py اجرا نمی‌شود.")
         return 0
@@ -140,25 +145,32 @@ def main(argv: list[str] | None = None) -> int:
         try:
             from shortsdl.config import load_config
             cfg = load_config()
-            repost_count = int((cfg.get("repost") or {}).get("per_day", 2))
+            repost_count = int((cfg.get("repost") or {}).get("per_day", 1))
         except Exception:
-            repost_count = 2
+            repost_count = 1
 
-    # اگر سهمیه‌ی امروز کم مانده، اولویت به ریپاست است (خواسته‌ی مالک).
+    # سهمیه‌ی امروز کم مانده؟ اولویت به محتوای ساخته‌شده‌ی خودمان است.
     room = MAX_UPLOADS_PER_DAY - done
     repost_count = min(repost_count, room) if not args.dry_run else repost_count
-    _log(f"[plan] ریپاست: {repost_count} | شورت: "
-         f"{'بله' if (args.only in ('all', 'shorts') and room - repost_count > 0) or args.dry_run else 'خیر'}")
+    _log(f"[plan] شورت اصلی: {'بله' if args.only in ('all', 'shorts') else 'خیر'} | "
+         f"ریپاست (تبدیل‌شده): {repost_count}")
 
     rc = 0
-    if args.only in ("all", "repost") and repost_count > 0:
-        rc |= step_repost(repost_count, args.dry_run)
-
+    # مرحله ۱: محتوای اصلی — اول اجرا می‌شود تا سهمیه‌اش تضمین شود.
     if args.only in ("all", "shorts"):
         if args.dry_run or (MAX_UPLOADS_PER_DAY - uploads_today()) > 0:
             rc |= step_shorts(args.dry_run)
         else:
             _log("[shorts] سهمیه‌ای برای شورت نمانده — رد شد.")
+
+    # مرحله ۲: ریپاست تبدیل‌شده با آنچه از سهمیه باقی مانده.
+    if args.only in ("all", "repost") and repost_count > 0:
+        left = MAX_UPLOADS_PER_DAY - uploads_today()
+        if args.dry_run or left > 0:
+            rc |= step_repost(min(repost_count, left) if not args.dry_run
+                              else repost_count, args.dry_run)
+        else:
+            _log("[repost] سهمیه‌ای نمانده — رد شد.")
 
     _banner(f"پایان — آپلودهای امروز: {uploads_today()}/{MAX_UPLOADS_PER_DAY}")
     return rc
