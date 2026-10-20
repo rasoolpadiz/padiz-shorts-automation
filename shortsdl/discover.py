@@ -160,7 +160,15 @@ def discover_market(
     search_workers: int = 4,
 ) -> list[dict]:
     """کاندیداهای یک بازار (global/persian) را جمع و بر اساس بازدید مرتب می‌کند."""
-    queries = market_cfg.get("queries") or []
+    # کوئری‌ها می‌توانند گروه‌بندی‌شده باشند (niches) یا یک لیست ساده (queries).
+    # گروه‌بندی برای تنوع لازم است: بدون آن «۶ کوئری مختلف طنز حیوانات» شش
+    # «موضوع» حساب می‌شد و کل کانال یک‌رنگ می‌شد.
+    niche_map = market_cfg.get("niches") or {}
+    if niche_map:
+        pairs = [(q, niche) for niche, qs in niche_map.items() for q in (qs or [])]
+    else:
+        pairs = [(q, "") for q in (market_cfg.get("queries") or [])]
+    queries = [p[0] for p in pairs]
     max_dur = market_cfg.get("max_duration_sec", filters.get("max_duration_sec") or 180)
     min_views = filters.get("min_views") or 0
     skip_live = filters.get("skip_live", True)
@@ -177,21 +185,22 @@ def discover_market(
 
     found: dict[str, dict] = {}
 
-    def _one(query: str) -> tuple[str, list[dict]]:
-        return query, search(query, results_per_query, sp=sp, gl=gl, hl=hl,
-                             proxy=proxy, cookies=cookies)
+    def _one(query: str, niche: str = "") -> tuple[str, str, list[dict]]:
+        return query, niche, search(query, results_per_query, sp=sp, gl=gl, hl=hl,
+                                    proxy=proxy, cookies=cookies)
 
     # جست‌وجوها موازی اجرا می‌شوند تا کشف سریع تمام شود
-    with ThreadPoolExecutor(max_workers=max(1, min(search_workers, len(queries) or 1))) as pool:
-        futures = [pool.submit(_one, q) for q in queries]
+    with ThreadPoolExecutor(max_workers=max(1, min(search_workers, len(pairs) or 1))) as pool:
+        futures = [pool.submit(_one, q, n) for q, n in pairs]
         for i, fut in enumerate(as_completed(futures), 1):
-            query, raw = fut.result()
-            LOG.info("[%s] جست‌وجو %d/%d: %s (%d نتیجه)", market, i, len(queries), query, len(raw))
+            query, niche, raw = fut.result()
+            LOG.info("[%s] جست‌وجو %d/%d: %s (%d نتیجه)", market, i, len(pairs), query, len(raw))
             kept = 0
             for entry in raw:
                 item = _normalize(entry, query)
                 if not item:
                     continue
+                item["niche"] = niche
                 item["url"] = url_template.format(id=item["id"])
                 if skip_live and item["live_status"] in ("is_live", "is_upcoming"):
                     continue

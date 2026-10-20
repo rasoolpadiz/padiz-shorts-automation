@@ -3,31 +3,129 @@
   "per_market_limit": 25,
   "repost": {
     "per_day": 2,
-    "markets": ["trending", "global"],
+    "markets": [
+      "trending"
+    ],
     "privacy_status": "public",
     "category_id": "24",
     "keep_files": false,
-    "tags": ["shorts", "viral", "trending", "funny"],
-    "hashtags": ["shorts", "viral", "trending"],
+    "tags": [
+      "shorts",
+      "viral",
+      "trending",
+      "funny"
+    ],
+    "hashtags": [
+      "shorts",
+      "viral",
+      "trending"
+    ],
     "description_template": "{title}\n\n🎬 ویدیو از کانال اصلی: {channel}\n🔗 منبع: {source}\n\nبرای ویدیوهای بیشتر سابسکرایب کنید.\n\n{hashtags}"
+  },
+  "watermark": {
+    "enabled": true,
+    "text": "@padiz",
+    "position": "top",
+    "margin_pct": 5.0,
+    "font_pct": 2.6,
+    "opacity": 0.88,
+    "preset": "veryfast",
+    "crf": 23,
+    "on_error": "skip"
+  },
+  "filters": {
+    "max_duration_sec": 180,
+    "min_views": 0,
+    "skip_live": true,
+    "require_vertical": true,
+    "min_height": 720
+  },
+  "content": {
+    "enabled": true,
+    "max_age_days": 21,
+    "min_views": 50000,
+    "min_like_ratio": 0.004,
+    "min_res": 720,
+    "max_duration_sec": 180,
+    "blocked_channels": [],
+    "blocked_keywords": [
+      "nursery",
+      "cocomelon",
+      "kids song",
+      "kid song",
+      "for kids",
+      "toddler",
+      "baby shark",
+      "peppa",
+      "blippi",
+      "cartoon",
+      "play doh",
+      "playdoh",
+      "surprise egg",
+      "doll",
+      "toy",
+      "toys",
+      "learn colors",
+      "abc song",
+      "wheels on the bus",
+      "baby",
+      "babies",
+      "official trailer",
+      "trailer",
+      "teaser",
+      "full movie",
+      "movie clip",
+      "music video",
+      "official video",
+      "lyrics",
+      "full song",
+      "audio song",
+      "netflix",
+      "prime video",
+      "disney",
+      "#ai",
+      "ai generated",
+      "ai video",
+      "ai comedy",
+      "ai ad",
+      "made with ai",
+      "midjourney",
+      "sora",
+      "free fire",
+      "garena",
+      "link in bio",
+      "whatsapp",
+      "telegram",
+      "subscribe my",
+      "sub4sub"
+    ],
+    "meta_workers": 4,
+    "meta_timeout": 25,
+    "diversify": true,
+    "max_per_channel": 1,
+    "max_per_niche": 1
   },
   "markets": {
     "global": {
-      "label": "جهانی (Global)",
+      "label": "جهانی — بهترین‌های هر موضوع",
       "region_code": "US",
       "relevance_language": "en",
       "sp": "CAMSAhgB",
       "queries": [
-        "#shorts",
-        "shorts",
+        "funny shorts",
+        "try not to laugh",
+        "funny moments",
         "satisfying video",
-        "cute animals",
-        "funny video",
-        "dance challenge",
+        "oddly satisfying",
+        "restoration video",
+        "hydraulic press",
         "football skills",
-        "life hacks",
-        "asmr",
-        "magic tricks"
+        "amazing goal",
+        "basketball highlights",
+        "amazing facts",
+        "science facts",
+        "did you know",
+        "space facts"
       ]
     },
     "persian": {
@@ -50,46 +148,47 @@
       ]
     },
     "trending": {
-      "label": "ترند جهانی (این هفته)",
+      "label": "ترند این هفته — طنز/رضایت‌بخش/ورزش/دانستنی",
       "region_code": "US",
       "relevance_language": "en",
-      "filters_sp": { "sort": "views", "upload": "week" },
-      "queries": [
-        "shorts",
-        "viral",
-        "trending",
-        "challenge",
-        "funny",
-        "dance",
-        "music",
-        "food",
-        "football",
-        "animals",
-        "satisfying",
-        "asmr",
-        "prank",
-        "magic",
-        "recipe"
-      ]
+      "filters_sp": {
+        "sort": "views",
+        "upload": "week"
+      },
+      "niches": {
+        "comedy": [
+          "funny shorts",
+          "try not to laugh",
+          "funny moments",
+          "hilarious fails",
+          "comedy shorts",
+          "funny animals"
+        ],
+        "satisfying": [
+          "satisfying video",
+          "oddly satisfying",
+          "restoration video",
+          "hydraulic press",
+          "kinetic sand",
+          "asmr"
+        ],
+        "sports": [
+          "football skills",
+          "amazing goal",
+          "basketball highlights",
+          "sports moments",
+          "insane catch"
+        ],
+        "facts": [
+          "amazing facts",
+          "science facts",
+          "did you know",
+          "space facts",
+          "mind blowing facts",
+          "unbelievable facts"
+        ]
+      }
     }
-  },
-  "watermark": {
-    "enabled": true,
-    "text": "@padiz",
-    "position": "top",
-    "margin_pct": 5.0,
-    "font_pct": 2.6,
-    "opacity": 0.88,
-    "preset": "veryfast",
-    "crf": 23,
-    "on_error": "skip"
-  },
-  "filters": {
-    "max_duration_sec": 180,
-    "min_views": 0,
-    "skip_live": true,
-    "require_vertical": true,
-    "min_height": 720
   },
   "download": {
     "max_height": 1080,
@@ -98,7 +197,10 @@
     "sleep_between": 1.0,
     "cookies_file": null,
     "proxy": null,
-    "player_clients": ["default", "android"],
+    "player_clients": [
+      "default",
+      "android"
+    ],
     "write_thumbnail": true,
     "write_info_json": true
   },

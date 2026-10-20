@@ -65,20 +65,27 @@ class Downloader:
 
     # ------------------------------------------------------------------ #
     def _format_selector(self) -> str:
-        h = int(self.cfg.get("max_height") or 1080)
+        """فرمت دانلود: بهترین کیفیت با سقفِ ضلع کوچک (نه ارتفاع).
+
+        باگ واقعی: نسخه‌ی قبلی `[height<=1080]` داشت. برای ویدیوی عمودی که
+        ارتفاعش ۱۹۲۰ است این شرط یعنی «فقط ۶۰۸x۱۰۸۰ را بگیر» — یک کلیپ
+        ۱۰۸۰x۱۹۲۰ در دسترس بود ولی ۶۰۸ پیکسل عرض دانلود می‌شد. حالا سقف روی
+        `res` (ضلع کوچک) اعمال می‌شود که برای افقی و عمودی هر دو درست است.
+        """
         if self.ffmpeg:
-            return (
-                f"bv*[ext=mp4][height<={h}]+ba[ext=m4a]/"
-                f"bv*[height<={h}]+ba/"
-                f"b[ext=mp4][height<={h}]/b[height<={h}]/b"
-            )
-        return f"b[ext=mp4][height<={h}]/b[height<={h}]/b"
+            return "bv*[ext=mp4]+ba[ext=m4a]/bv*+ba/b[ext=mp4]/b"
+        return "b[ext=mp4]/b"
+
+    def _format_sort(self) -> list[str]:
+        r = int(self.cfg.get("max_res") or self.cfg.get("max_height") or 1080)
+        return [f"res:{r}"]
 
     def _opts(self, folder: Path, rank: int) -> dict:
         opts = {
             "paths": {"home": str(folder)},
             "outtmpl": {"default": f"{rank:02d}_%(id)s.%(ext)s"},
             "format": self._format_selector(),
+            "format_sort": self._format_sort(),
             "merge_output_format": "mp4",
             "quiet": True,
             "no_warnings": True,

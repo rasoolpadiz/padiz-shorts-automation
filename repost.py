@@ -54,6 +54,7 @@ from shortsdl.discover import discover_market  # noqa: E402
 from shortsdl.downloader import Downloader  # noqa: E402
 from shortsdl.utils import read_json, setup_logging, write_json  # noqa: E402
 
+import curate  # noqa: E402   (فیلتر و امتیازدهی محتوا)
 import watermark  # noqa: E402  (مهر زدن آدرس کانال روی ویدیو)
 
 # Child of the "shortsdl" logger on purpose: utils.setup_logging() configures
@@ -167,11 +168,11 @@ def collect_candidates(markets: list[str], cfg: dict, skip: set[str], need: int)
     dcfg = cfg.get("discovery", {})
     dcfg_dl = cfg.get("download", {})
     per_query = int(dcfg.get("results_per_query", 25))
-    # استخر بزرگ‌تر از تعداد موردنیاز: چون افقی/کم‌کیفیت‌ها رد می‌شوند و باید
-    # جایگزین در دست باشد. کشف هزینه‌ی API ندارد (yt-dlp جست‌وجو می‌کند)، پس
-    # ۱۲ کاندید گرفتن ارزان است.
-    overfetch = max(int(dcfg.get("overfetch", 3) or 1), 8)
-    limit = max(need * overfetch, need, 12)
+    # استخر بزرگ‌تر از تعداد موردنیاز: چون افقی/کم‌کیفیت/بی‌ربط‌ها رد می‌شوند و
+    # باید جایگزین در دست باشد. کشف هزینه‌ی API ندارد (yt-dlp جست‌وجو می‌کند)،
+    # پس ۲۰ کاندید گرفتن ارزان است.
+    overfetch = max(int(dcfg.get("overfetch", 3) or 1), 10)
+    limit = max(need * overfetch, need, 40)
 
     out: list[tuple[str, list[dict]]] = []
     for market in markets:
@@ -193,7 +194,9 @@ def collect_candidates(markets: list[str], cfg: dict, skip: set[str], need: int)
             search_workers=int(dcfg.get("search_workers", 4)),
         )
         fresh = [it for it in items if str(it.get("id")) not in skip]
-        LOG.info("[%s] %d کاندید، %d مورد تازه (بقیه قبلاً منتشر شده‌اند)",
+        # فیلتر ارزان روی عنوان/کانال، قبل از گرفتن متادیتا
+        fresh = curate.prefilter(fresh, cfg.get("content", {}) or {})
+        LOG.info("[%s] %d کاندید، %d مورد تازه و قابل بررسی (بقیه رد یا قبلاً منتشر شده)",
                  market, len(items), len(fresh))
         if fresh:
             out.append((market, fresh))
@@ -215,70 +218,52 @@ def _find_orphan_watermarked(folder: Path, video_id: str) -> Path | None:
     return None
 
 
-def download_usable(market: str, items: list[dict], cfg: dict, outdir: Path,
-                    need: int, require_vertical: bool = True,
-                    min_height: int = 720,
-                    max_attempts: int = 12):
-    """یک‌به‌یک دانلود می‌کند تا `need` فایل قابل‌قبول جمع شود.
+def download_item(item: dict, market: str, cfg: dict, outdir: Path,
+                  dl_cache: dict) -> dict | None:
+    """یک کاندید را دانلود می‌کند و نتیجه را برمی‌گرداند (None = نشد).
 
-    چرا یکی‌یکی و نه دسته‌ای؟ جست‌وجوی «Shorts» تضمین نمی‌کند ویدیو عمودی باشد —
-    تست واقعی: اولین نتیجه‌ی ترند یک تریلر افقی ۱۹۲۰x۱۰۸۰ بود. اگر دو تا را با
-    هم می‌گرفتیم، هر دو دور ریخته می‌شدند و باید از اول دانلود می‌کردیم. حالا
-    هر کاندید دانلود می‌شود، ابعادش چک می‌شود و اگر افقی بود همان‌جا حذف و
-    سراغ بعدی می‌رویم (پهنای باندِ فقط یک ویدیوی اضافه).
+    فیلتر اصلی محتوا (افقی/کیفیت/قدمت/کلمات بلاک‌شده) قبلاً روی متادیتا انجام
+    شده است؛ اینجا فقط یک بازبینی نهایی روی فایل واقعی انجام می‌شود، چون
+    متادیتای یوتیوب گاهی رزولوشنی بالاتر از فرمت‌های واقعی اعلام می‌کند.
     """
-    dcfg = cfg.get("download", {})
-    dl = Downloader(
-        dcfg,
-        archive_path=outdir / ".download_archive.txt",
-        proxy=dcfg.get("proxy"),
-        cookies=dcfg.get("cookies_file"),
-    )
     folder = outdir / market
-    archive = outdir / ".download_archive.txt"
-    got: list[dict] = []
-    attempts = 0
+    folder.mkdir(parents=True, exist_ok=True)
+    vid = str(item.get("id"))
 
-    for item in items:
-        if len(got) >= need or attempts >= max_attempts:
-            break
-        attempts += 1
+    orphan = _find_orphan_watermarked(folder, vid)
+    if orphan:
+        LOG.info("نسخه‌ی مهرخورده‌ی قبلی استفاده شد: %s", orphan.name)
+        return {"id": vid, "rank": 1, "item": item, "file": str(orphan),
+                "size": orphan.stat().st_size, "error": None, "skipped": True}
 
-        orphan = _find_orphan_watermarked(folder, str(item["id"]))
-        if orphan:
-            LOG.info("نسخه‌ی مهرخورده‌ی قبلی استفاده شد: %s", orphan.name)
-            got.append({"id": item["id"], "rank": len(got) + 1, "item": item,
-                        "file": str(orphan), "size": orphan.stat().st_size,
-                        "error": None, "skipped": True})
-            continue
+    dl = dl_cache.get(market)
+    if dl is None:
+        dcfg = cfg.get("download", {})
+        dl = Downloader(
+            dcfg,
+            archive_path=outdir / ".download_archive.txt",
+            proxy=dcfg.get("proxy"),
+            cookies=dcfg.get("cookies_file"),
+        )
+        dl_cache[market] = dl
 
-        results = dl.download_all([item], folder, workers=1,
-                                  sleep_between=0, target=1)
-        res = next((r for r in results if r.get("file")), None)
-        if not res:
-            continue
+    results = dl.download_all([item], folder, workers=1, sleep_between=0, target=1)
+    res = next((r for r in results if r.get("file")), None)
+    if not res:
+        return None
 
-        if require_vertical:
-            w, h = watermark.probe_size(res["file"])
-            if h < w:
-                LOG.info("رد شد (افقی %dx%d): %s", w, h, item.get("id"))
-                # از آرشیو درش می‌آوریم تا اگر بعداً خواستیم دوباره دیده شود
-                unarchive(archive, str(item["id"]))
-                cleanup_file(res["file"])
-                continue
-            if h < min_height:
-                # کیفیت پایین روی کانال بد دیده می‌شود. تست واقعی: پربازدیدترین
-                # نتیجه‌ی ترند یک کلیپ ۳۶۰x۶۴۰ بود (بازآپلود کاربر دیگر) — عدد
-                # بازدید بالا تضمین کیفیت نیست.
-                LOG.info("رد شد (کیفیت پایین %dx%d < %dp): %s", w, h, min_height, item.get("id"))
-                unarchive(archive, str(item["id"]))
-                cleanup_file(res["file"])
-                continue
-
-        got.append(res)
-
-    LOG.info("[%s] %d فایل قابل‌استفاده از %d تلاش", market, len(got), attempts)
-    return got, folder
+    w, h = watermark.probe_size(res["file"])
+    min_res = int(
+        (cfg.get("content", {}) or {}).get("min_res")
+        or (cfg.get("filters", {}) or {}).get("min_height")
+        or 720
+    )
+    if h <= w or min(w, h) < min_res:
+        LOG.info("رد شد (ابعاد فایل %dx%d): %s", w, h, vid)
+        unarchive(outdir / ".download_archive.txt", vid)
+        cleanup_file(res["file"])
+        return None
+    return res
 
 
 # --------------------------------------------------------------------------- #
@@ -419,65 +404,90 @@ def run(count: int, markets: list[str], dry_run: bool, no_upload: bool,
         LOG.warning("هیچ کاندیدای تازه‌ای پیدا نشد.")
         return 0
 
+    # یک لیست تخت و بدون تکرار: یک ویدیو می‌تواند در دو بازار باشد و اگر
+    # دوبار شمرده شود، ممکن است دوبار آپلود شود.
+    flat, seen = [], set()
+    for market, items in candidates:
+        for it in items:
+            vid = str(it.get("id"))
+            if vid in seen:
+                continue
+            seen.add(vid)
+            flat.append(dict(it, _market=market))
+    LOG.info("[curate] %d کاندید یکتا از %d بازار", len(flat), len(candidates))
+
+    # مرحله‌ی انتخاب: متادیتای کامل + فیلتر سخت + امتیاز «ترند بودن»
+    content_cfg = cfg.get("content", {}) or {}
+    if content_cfg.get("enabled", True):
+        flat = curate.enrich(
+            flat,
+            workers=int(content_cfg.get("meta_workers", 4) or 4),
+            timeout=int(content_cfg.get("meta_timeout", 25) or 25),
+        )
+        ranked = curate.rank(flat, content_cfg, want=max(todo * 3, 6))
+    else:
+        ranked = flat
+
+    if not ranked:
+        LOG.warning("بعد از فیلتر محتوا هیچ کاندیدای قابل‌انتشاری نماند.")
+        return 0
+
     if dry_run:
-        for market, items in candidates:
-            print(f"\n=== {market} — {len(items)} کاندید تازه ===")
-            for i, it in enumerate(items[:10], 1):
-                print(f"{i:2d}. {(it.get('views') or 0):>12,}  {it['id']}  {it.get('title', '')[:60]}")
+        print(f"\n=== {len(ranked)} کاندید پذیرفته ===")
+        for i, it in enumerate(ranked[:12], 1):
+            print(f"{i:2d}. {it.get('score', 0):7.1f}  {it['id']}  "
+                  f"{(it.get('title') or '')[:58]}")
         return 0
 
     uploaded = 0
-    for market, items in candidates:
+    dl_cache: dict = {}
+    per_market: dict[str, list[dict]] = {}
+
+    for item in ranked:
         if uploaded >= todo:
             break
-        need = todo - uploaded
-        LOG.info("دانلود از بازار %s (هدف: %d فایل)...", market, need)
-        ok_results, folder = download_usable(
-            market, items, cfg, outdir, need,
-            require_vertical=bool(cfg.get("filters", {}).get("require_vertical", True)),
-            min_height=int(cfg.get("filters", {}).get("min_height", 720) or 0),
-        )
-        if not ok_results:
-            LOG.warning("از بازار %s چیزی دانلود نشد — بازار بعدی.", market)
+        market = item.get("_market") or markets[0]
+        LOG.info("دانلود [%s] %s…", market, (item.get("title") or "")[:50])
+        res = download_item(item, market, cfg, outdir, dl_cache)
+        if not res:
+            continue
+        per_market.setdefault(market, []).append(res)
+
+        if no_upload:
+            LOG.info("[no-upload] آماده بود: %s (%s)", res["file"], item.get("id"))
+            uploaded += 1
             continue
 
-        rows = indexer.build_rows(market, [r["item"] for r in ok_results], ok_results)
+        # مهر زدن لوگوی آدرس کانال — خواسته‌ی مالک: ویدیوی دانلودشده بدون
+        # لوگو منتشر نشود. فایل اصلی داخل watermark.apply پاک می‌شود، پس
+        # در هر لحظه فقط یک نسخه روی دیسک است.
+        if wm_cfg.get("enabled", True):
+            marked = watermark.apply(res["file"], wm_cfg)
+            if marked is None:
+                LOG.error("مهر زدن شکست خورد (on_error=fail) — این ویدیو رد شد")
+                cleanup_file(res["file"])
+                continue
+            res["file"] = marked
+
+        url = upload_one(res["file"], item, rcfg)
+        if not url:
+            # آپلود شکست خورد: فایل را نگه نمی‌داریم (دیسک) ولی شناسه را از
+            # آرشیو درمی‌آوریم تا اجرای بعد دوباره شانس داشته باشد.
+            unarchive(outdir / ".download_archive.txt", str(item["id"]))
+            cleanup_file(res["file"])
+            continue
+
+        uploaded += 1
+        record_upload(str(item["id"]), item, url, market)
+        LOG.info("✅ منتشر شد: %s", url)
+        if not rcfg.get("keep_files"):
+            cleanup_file(res["file"])
+
+    for market, results in per_market.items():
+        folder = outdir / market
+        rows = indexer.build_rows(market, [r["item"] for r in results], results)
         indexer.write_csv(folder / "index.csv", rows)
         indexer.write_json(folder / "index.json", rows)
-
-        for res in ok_results:
-            if uploaded >= todo:
-                break
-            item = res["item"]
-            if no_upload:
-                LOG.info("[no-upload] آماده بود: %s (%s)", res["file"], item.get("id"))
-                uploaded += 1
-                continue
-
-            # مهر زدن لوگوی آدرس کانال — خواسته‌ی مالک: ویدیوی دانلودشده بدون
-            # لوگو منتشر نشود. فایل اصلی داخل watermark.apply پاک می‌شود، پس
-            # در هر لحظه فقط یک نسخه روی دیسک است.
-            if wm_cfg.get("enabled", True):
-                marked = watermark.apply(res["file"], wm_cfg)
-                if marked is None:
-                    LOG.error("مهر زدن شکست خورد (on_error=fail) — این ویدیو رد شد")
-                    cleanup_file(res["file"])
-                    continue
-                res["file"] = marked
-
-            url = upload_one(res["file"], item, rcfg)
-            if not url:
-                # آپلود شکست خورد: فایل را نگه نمی‌داریم (دیسک) ولی شناسه را از
-                # آرشیو درمی‌آوریم تا اجرای بعد دوباره شانس داشته باشد.
-                unarchive(outdir / ".download_archive.txt", str(item["id"]))
-                cleanup_file(res["file"])
-                continue
-
-            uploaded += 1
-            record_upload(str(item["id"]), item, url, market)
-            LOG.info("✅ منتشر شد: %s", url)
-            if not rcfg.get("keep_files"):
-                cleanup_file(res["file"])
 
     LOG.info("—" * 26)
     LOG.info("پایان ریپاست: %d از %d آپلود شد (امروز: %d/%d)",
