@@ -96,6 +96,19 @@ def _top_up(targets, state):
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
+
+    # Owner directive 2026-10-20: the channel is SHORTS-ONLY. Growth comes from
+    # volume on Shorts, and every long-form render costs a Gemini TTS request
+    # plus 1,600 upload units that a Short could have used instead. The runner
+    # stays in the repo (the code and the state are still valid) but it is off
+    # unless someone asks for it explicitly, so a leftover cron entry cannot
+    # quietly publish a long video.
+    if (os.environ.get("PADIZ_LONGFORM", "0") or "0").strip().lower() not in (
+            "1", "true", "yes", "on"):
+        print("[long] long-form is retired (shorts-only channel) - nothing to do. "
+              "Set PADIZ_LONGFORM=1 to run it deliberately.")
+        return 0
+
     topics = L.load_topics()
     if not topics:
         print("[long] no topics available")

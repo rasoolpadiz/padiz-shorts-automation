@@ -805,27 +805,24 @@ def generate_voice_gemini(text: str, output_path: str, voice_name: str = None) -
 def generate_voice(text: str, voice: str, output_path: str):
     """Narrate ``text`` into ``output_path`` as an MP3.
 
-    Tries Google AI Studio (Gemini) audio generation first for natural Persian
-    speech, and falls back to edge-tts whenever that is unavailable or fails.
-    Every failure (not just a rejected key) disables Gemini for the rest of the
-    process, so one video is never narrated half by one engine and half by
-    the other - with the free TTS quota this small, partial runs are the norm,
-    not the exception.
+    Tries Google AI Studio (Gemini) audio generation first for natural speech.
+    edge-tts is NEVER used - it produces robotic, unnatural audio that damages
+    the channel. If Gemini is unavailable, the call raises so the pipeline
+    fails gracefully instead of publishing a robotic-voice video.
     """
     try:
         gemini_voice = gemini_voice_for(voice)
         if generate_voice_gemini(text, output_path, voice_name=gemini_voice):
             print(f"[voice] Generated with Google AI Studio (Gemini voice: {gemini_voice})")
             return
-        print("[voice] Gemini voice unavailable -> falling back to edge-tts.")
+        print("[voice] Gemini voice unavailable - edge-tts is disabled, refusing.")
     except Exception as e:
-        print(f"[voice] Gemini voice error ({e}) -> falling back to edge-tts.")
+        print(f"[voice] Gemini voice error ({e}) - edge-tts is disabled, refusing.")
 
-    # Persian strict mode: a robotic edge-tts Persian video is worse than none.
-    if is_fa_text(text):
-        _refuse_robotic_fa(text)
-
-    asyncio.run(generate_voice_edge(text, voice, output_path))
+    raise RuntimeError(
+        "Voice generation failed: Gemini TTS unavailable and edge-tts fallback is disabled. "
+        "No robotic voice will be published."
+    )
 
 def _detect_silences(audio_path: str, noise_db: int = -35, min_dur: float = 0.25):
     """Return [(start, end)] silence spans reported by ffmpeg silencedetect."""
@@ -963,6 +960,80 @@ def get_audio_duration(file_path: str) -> float:
     res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
     return float(res.stdout.strip())
 
+def _ffmpeg_quiet(cmd):
+    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL,
+                   stderr=subprocess.DEVNULL)
+
+
+def _clip_from_concat(lst_path, audio_path, duration, clip_path):
+    """Timed subtitle clip: one pre-rendered frame per caption chunk."""
+    _ffmpeg_quiet([
+        "ffmpeg", "-y",
+        "-f", "concat", "-safe", "0", "-i", lst_path,
+        "-i", audio_path,
+        "-t", f"{duration:.2f}",
+        "-vsync", "vfr",
+        "-pix_fmt", "yuv420p",
+        "-c:v", "libx264", "-tune", "stillimage", "-preset", "fast", "-crf", "18",
+        "-c:a", "aac", "-b:a", "192k", "-shortest",
+        clip_path,
+    ])
+
+
+def _clip_from_overlay(slide_png, overlay_png, audio_path, duration, clip_path):
+    """Last-resort subtitle clip: one static caption layer over the slide."""
+    _ffmpeg_quiet([
+        "ffmpeg", "-y",
+        "-loop", "1", "-i", slide_png,
+        "-loop", "1", "-i", overlay_png,
+        "-i", audio_path,
+        "-t", f"{duration:.2f}",
+        "-filter_complex",
+        "[0:v][1:v]overlay=0:0:format=auto,scale=1080:1920,format=yuv420p[v]",
+        "-map", "[v]", "-map", "2:a",
+        "-c:v", "libx264", "-tune", "stillimage", "-preset", "fast", "-crf", "18",
+        "-c:a", "aac", "-b:a", "192k", "-shortest",
+        clip_path,
+    ])
+
+
+def _clip_plain(slide_png, audio_path, duration, clip_path):
+    """No subtitle at all - only used when even the static layer fails."""
+    _ffmpeg_quiet([
+        "ffmpeg", "-y", "-loop", "1", "-i", slide_png, "-i", audio_path,
+        "-t", f"{duration:.2f}",
+        "-vf", "scale=1080:1920,format=yuv420p",
+        "-c:v", "libx264", "-tune", "stillimage", "-preset", "fast", "-crf", "18",
+        "-c:a", "aac", "-b:a", "192k", "-shortest",
+        clip_path,
+    ])
+
+
+def _caption_on_screen(clip_path, duration, card_fill, tag=""):
+    """Read the encoded clip back and confirm the caption band has text.
+
+    The subtitle used to be able to vanish without anyone noticing: the slide is
+    drawn with its body block suppressed, so a clip whose caption frames were
+    dropped ships as an empty card. This is the check that catches it.
+    """
+    probe = os.path.join(BASE_DIR, "temp_render", f"_capchk_{tag or 'x'}.png")
+    t = max(0.0, min(duration * 0.45, duration - 0.25))
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-ss", f"{t:.3f}", "-i", clip_path,
+             "-frames:v", "1", probe],
+            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        import captions as CAP
+        return CAP.band_has_text(probe, card_fill)
+    except Exception:
+        return True     # a broken probe must never block a render
+    finally:
+        try:
+            os.remove(probe)
+        except OSError:
+            pass
+
+
 def build_full_short(topic_data: dict, output_filename: str):
     work_dir = os.path.join(BASE_DIR, "temp_render")
     os.makedirs(work_dir, exist_ok=True)
@@ -999,6 +1070,8 @@ def build_full_short(topic_data: dict, output_filename: str):
     try:
         import captions as CAP
         if not CAP.enabled():
+            print("[caption] WARNING: subtitles are OFF (SHORTS_CAPTIONS=0 in the "
+                  "environment) - every slide will ship without a subtitle")
             CAP = None
     except Exception as _e:
         print(f"[caption] unavailable ({_e}) - using static slides")
@@ -1006,6 +1079,7 @@ def build_full_short(topic_data: dict, output_filename: str):
     if CAP:
         print("[caption] plain static subtitles ON (set SHORTS_CAPTIONS=0 to disable)")
 
+    caption_slides = 0
     for idx, slide in enumerate(slides, start=1):
         img_path = os.path.join(work_dir, f"slide_{idx}.png")
         audio_path = audio_paths[idx - 1]
@@ -1014,11 +1088,23 @@ def build_full_short(topic_data: dict, output_filename: str):
         speech_dur = get_audio_duration(audio_path)
         duration = speech_dur + 0.4
 
+        try:
+            _theme, _en_mode, _mood = shorts_theme(
+                category, slide["title"], slide["text"], topic_lang or None)
+            card_fill = _theme.get("card_fill")
+        except Exception:
+            card_fill = None
+
+        # img_slot: the slide was drawn WITHOUT its static body block, because
+        # the subtitle is supposed to occupy that space. If a subtitle then fails
+        # to appear, the block has to be drawn back or the card ships empty.
+        img_slot = False
         frames = None
         if CAP:
             try:
                 create_slide_image(category, slide["title"], slide["text"], idx, total,
                                    img_path, lang=topic_lang or None, captions_on=True)
+                img_slot = True
                 frames = CAP.build_frames(
                     img_path, slide.get("speech", ""), speech_dur, work_dir, f"{idx:02d}",
                     category=category, title=slide["title"], text=slide["text"],
@@ -1027,55 +1113,75 @@ def build_full_short(topic_data: dict, output_filename: str):
                 print(f"[caption] slide {idx} failed ({type(e).__name__}: {e}) - static slide")
                 frames = None
 
-        if frames:
-            lst = CAP.write_concat_list(frames, os.path.join(work_dir, f"cap_{idx}.txt"), tail=0.4)
-            ffmpeg_clip = [
-                "ffmpeg", "-y",
-                "-f", "concat", "-safe", "0", "-i", lst,
-                "-i", audio_path,
-                "-t", f"{duration:.2f}",
-                "-vsync", "vfr",
-                "-pix_fmt", "yuv420p",
-                "-c:v", "libx264", "-tune", "stillimage", "-preset", "fast", "-crf", "18",
-                "-c:a", "aac", "-b:a", "192k", "-shortest",
-                clip_path
-            ]
-        else:
-            create_slide_image(category, slide["title"], slide["text"], idx, total,
-                               img_path, lang=topic_lang or None)
-            ffmpeg_clip = [
-                "ffmpeg", "-y",
-                "-loop", "1", "-i", img_path,
-                "-i", audio_path,
-                "-t", f"{duration:.2f}",
-                "-vf", "scale=1080:1920,format=yuv420p",
-                "-c:v", "libx264", "-tune", "stillimage", "-preset", "fast", "-crf", "18",
-                "-c:a", "aac", "-b:a", "192k", "-shortest",
-                clip_path
-            ]
-
-        subprocess.run(ffmpeg_clip, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-        # A caption clip whose duration drifted means the concat timing was not
-        # honoured, which would desync every later slide. Rebuild it the plain
-        # way rather than ship a broken video.
+        built = False
         if frames:
             try:
+                lst = CAP.write_concat_list(
+                    frames, os.path.join(work_dir, f"cap_{idx}.txt"), tail=0.4)
+                _clip_from_concat(lst, audio_path, duration, clip_path)
+                built = True
                 # The invariant is that the clip covers the narration. Comparing
                 # against `duration` would be wrong: -shortest cuts the output at
                 # the audio, so the +0.4s tail never reaches the file.
                 got = get_audio_duration(clip_path)
                 if abs(got - speech_dur) > 0.5:
                     print(f"[caption] slide {idx} timing off ({got:.2f}s vs "
-                          f"{speech_dur:.2f}s narration) - rebuilding static")
-                    subprocess.run([
-                        "ffmpeg", "-y", "-loop", "1", "-i", img_path, "-i", audio_path,
-                        "-t", f"{duration:.2f}", "-vf", "scale=1080:1920,format=yuv420p",
-                        "-c:v", "libx264", "-tune", "stillimage", "-preset", "fast",
-                        "-crf", "18", "-c:a", "aac", "-b:a", "192k", "-shortest", clip_path,
-                    ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                          f"{speech_dur:.2f}s narration)")
+                    built = False
+                elif not _caption_on_screen(clip_path, duration, card_fill, f"{idx:02d}"):
+                    print(f"[caption] slide {idx} subtitle missing from the encoded clip")
+                    built = False
             except Exception as e:
-                print(f"[caption] slide {idx} verify skipped ({e})")
+                print(f"[caption] slide {idx} timed build failed "
+                      f"({type(e).__name__}: {e})")
+                built = False
+
+        if built:
+            caption_slides += 1
+
+        if not built and CAP:
+            # Second chance, and the one that makes the guarantee real: one
+            # static subtitle line burned over the slide for the whole clip.
+            try:
+                if not img_slot:
+                    create_slide_image(category, slide["title"], slide["text"], idx,
+                                       total, img_path, lang=topic_lang or None,
+                                       captions_on=True)
+                    img_slot = True
+                overlay = CAP.build_static_overlay(
+                    slide.get("speech") or slide.get("text") or slide["title"],
+                    os.path.join(work_dir, f"cap_static_{idx:02d}.png"),
+                    category=category, title=slide["title"],
+                    lang=topic_lang or None)
+                if overlay:
+                    _clip_from_overlay(img_path, overlay, audio_path, duration, clip_path)
+                    if _caption_on_screen(clip_path, duration, card_fill, f"s{idx:02d}"):
+                        built = True
+                        caption_slides += 1
+                        print(f"[caption] slide {idx} static subtitle burned in")
+                    else:
+                        # The overlay went in but no text can be read back. Do not
+                        # ship a card that looks empty: drop to the slide's own
+                        # body text below.
+                        print(f"[caption] slide {idx} static subtitle not detected")
+            except Exception as e:
+                print(f"[caption] slide {idx} static subtitle failed "
+                      f"({type(e).__name__}: {e})")
+
+        if not built:
+            # Truly nothing worked: restore the slide's own body text rather than
+            # ship the empty card that captions_on=True left behind.
+            if img_slot:
+                try:
+                    create_slide_image(category, slide["title"], slide["text"], idx,
+                                       total, img_path, lang=topic_lang or None)
+                    img_slot = False
+                except Exception as e:
+                    print(f"[caption] slide {idx} body restore failed ({e})")
+            _clip_plain(img_path, audio_path, duration, clip_path)
+            print(f"[caption] slide {idx} WARNING: no subtitle - body text only")
+
+        if frames:
             for _p, _d in frames:
                 try:
                     os.remove(_p)
@@ -1083,6 +1189,12 @@ def build_full_short(topic_data: dict, output_filename: str):
                     pass
 
         clip_files.append(clip_path)
+
+    if CAP:
+        print(f"[caption] subtitles on {caption_slides}/{total} slides")
+        if caption_slides < total:
+            print(f"[caption] WARNING: {total - caption_slides} slide(s) shipped "
+                  f"without a subtitle")
 
     concat_list_file = os.path.join(work_dir, "concat_list.txt")
     with open(concat_list_file, "w", encoding="utf-8") as f:

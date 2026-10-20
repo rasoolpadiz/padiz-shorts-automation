@@ -24,6 +24,22 @@ How it works
 Persian shaping is delegated to pipeline.draw_smart / pipeline.prepare_bidi_text,
 so this module inherits the exact same libraqm-vs-arabic_reshaper decision as the
 rest of the renderer and can never disagree with the slide underneath.
+
+Guarantee (owner directive 2026-10-20)
+--------------------------------------
+EVERY Short carries a subtitle. Before this change build_frames() silently
+returned None whenever the narration was shorter than two words or shorter than
+0.4s, and pipeline.py then shipped a slide with no subtitle at all - and, in the
+timing-retry path, with no text either (the body block had been suppressed for a
+subtitle that never appeared). Now:
+
+* build_frames() falls back to the slide's own text (then its title) when the
+  narration is unusable, and a single static line when there is nothing to time.
+* build_static_overlay() renders a transparent caption layer that pipeline.py
+  burns over the slide as a last resort, so a subtitle is always on screen.
+* band_has_text() reads the encoded clip back and reports whether the caption
+  band really contains text, so pipeline.py can detect and repair a clip whose
+  subtitle never made it into the file.
 """
 
 import os
@@ -39,6 +55,12 @@ MAX_WORDS_PER_CHUNK = 4
 MIN_WORDS_PER_CHUNK = 2
 CAPTION_CY = 1055       # vertical centre of the caption line, inside the card
 MIN_STATE = 0.12        # never emit a frame shorter than this (1-frame flicker)
+MAX_LINES = 2           # a timed chunk is one line; the static net may use 2
+
+# The caption lives inside the card, between the divider and the progress line.
+# pipeline.py uses this band to verify the subtitle actually reached the file.
+BAND_X = (90, 990)
+BAND_Y = (935, 1180)
 
 # Trailing punctuation means the narrator pauses, so the word "lasts" longer.
 HARD_PAUSE = ".!?؟…"
@@ -56,6 +78,21 @@ def clean_words(speech):
     """
     text = _EMOJI_RE.sub(" ", speech or "")
     return [w for w in text.replace("\n", " ").split(" ") if w.strip()]
+
+
+def caption_words(speech, text="", title=""):
+    """The words the subtitle should show.
+
+    The narration is the source of truth and is used whenever it has ANY words -
+    a one-word line is still what the narrator said. Only a completely empty or
+    emoji-only narration falls through to the slide's own text, then its title,
+    so a slide can never end up with no subtitle at all.
+    """
+    for src in (speech, text, title):
+        words = clean_words(src)
+        if words:
+            return words
+    return []
 
 
 def word_weight(word):
@@ -136,6 +173,57 @@ def _line_width(draw, text, font):
     return P._measure(draw, P.prepare_bidi_text(text), font)
 
 
+def _wrap_all(draw, text, font, max_width):
+    """Wrap every word, with no line cap (used to measure a whole block)."""
+    words = (text or "").split()
+    lines, cur = [], []
+    for w in words:
+        trial = " ".join(cur + [w])
+        if not cur or _line_width(draw, trial, font) <= max_width:
+            cur.append(w)
+        else:
+            lines.append(" ".join(cur))
+            cur = [w]
+    if cur:
+        lines.append(" ".join(cur))
+    return lines or [""]
+
+
+def _fit_block(draw, text, max_width, max_lines, start_size=BASE_SIZE,
+               min_size=MIN_SIZE):
+    """Largest size at which `text` wraps into at most `max_lines` lines."""
+    size = start_size
+    while True:
+        font = P.font_for(text, size)
+        lines = _wrap_all(draw, text, font, max_width)
+        widest = max((_line_width(draw, l, font) for l in lines), default=0.0)
+        if (len(lines) <= max_lines and widest <= max_width) or size <= min_size:
+            return lines, size
+        size -= 4
+
+
+def draw_block(draw, text, size, fill, max_width, max_lines=MAX_LINES,
+               cy=CAPTION_CY):
+    """Draw the caption as a centred block of 1..max_lines plain lines.
+
+    A single line is the normal case. The block form exists so a subtitle that
+    cannot fit on one line at MIN_SIZE is wrapped instead of being truncated -
+    text must never be silently dropped from a subtitle.
+    """
+    lines, size = _fit_block(draw, text, max_width, max_lines, start_size=size)
+    if len(lines) > max_lines:
+        # Even at MIN_SIZE it does not fit: keep the head, mark the cut.
+        lines = lines[:max_lines]
+        lines[-1] = lines[-1].rstrip() + " …"
+    font = P.font_for(text, size)
+    line_h = int(size * 1.24)
+    y0 = cy - ((len(lines) - 1) * line_h) / 2.0
+    for i, line in enumerate(lines):
+        P.draw_smart(draw, (1080 // 2, y0 + i * line_h), line, font, fill,
+                     anchor="mm")
+    return size
+
+
 def layout_line(draw, text, size, fill):
     """Draw one plain caption line, centred.
 
@@ -144,8 +232,19 @@ def layout_line(draw, text, size, fill):
     and RTL ordering and the centre anchor, so the subtitle can never disagree
     with the typography of the card it sits on.
     """
-    font = P.font_for(text, size)
-    P.draw_smart(draw, (1080 // 2, CAPTION_CY), text, font, fill, anchor="mm")
+    draw_block(draw, text, size, fill, 1080 - 2 * 120, max_lines=MAX_LINES)
+
+
+def _caption_style(category, title, text, lang):
+    """(fill, safe_width) - the slide's own body colour, as the subtitle colour."""
+    try:
+        theme, _en_mode, _mood = P.shorts_theme(category, title, text, lang)
+        fill = tuple(theme.get("body") or (241, 245, 249))
+    except Exception:
+        fill = (241, 245, 249)
+    # 120px of side padding, not the 90px the slide uses: the slide card border
+    # sits at 70px, so a caption allowed to reach 90px would run into it.
+    return fill, 1080 - 2 * 120
 
 
 # --- Frame production -------------------------------------------------------
@@ -153,13 +252,14 @@ def build_frames(slide_png, speech, audio_duration, out_dir, tag,
                  category="", title="", text="", lang=None):
     """Render one PNG per caption chunk for a single slide.
 
-    Returns [(png_path, seconds)] in play order, or None when captions cannot be
-    produced (in which case the caller keeps the plain static-image clip).
+    Returns [(png_path, seconds)] in play order. It returns None ONLY when the
+    slide image cannot be read or there is no text at all to show - never merely
+    because the narration was short, which used to cost the video its subtitle.
     """
     from PIL import Image, ImageDraw
 
-    words = clean_words(speech)
-    if len(words) < 2 or audio_duration <= 0.4:
+    words = caption_words(speech, text, title)
+    if not words:
         return None
 
     try:
@@ -167,16 +267,23 @@ def build_frames(slide_png, speech, audio_duration, out_dir, tag,
     except Exception:
         return None
 
-    probe = ImageDraw.Draw(base)
-    theme, _en_mode, _mood = P.shorts_theme(category, title, text, lang)
-    # The subtitle is drawn in the slide's own body colour, so it reads as "the
-    # text of the card" rather than as an overlay in a style of its own.
-    fill = tuple(theme.get("body") or (241, 245, 249))
-    # 120px of side padding, not the 90px the slide uses: the slide card border
-    # sits at 70px, so a caption allowed to reach 90px would run into it.
-    safe_w = 1080 - 2 * 120
+    fill, safe_w = _caption_style(category, title, text, lang)
+    dur = float(audio_duration or 0.0)
 
-    chunks, base_size = fit_chunks(probe, words, audio_duration, safe_w)
+    if dur <= 0.4 or len(words) < MIN_WORDS_PER_CHUNK:
+        # Nothing to time: hold ONE static line for the whole slide. A fixed
+        # subtitle is always better than no subtitle.
+        hold = max(dur, 0.6)
+        chunks = [[(w, 0.0, hold) for w in words]]
+        base_size = BASE_SIZE
+    else:
+        try:
+            chunks, base_size = fit_chunks(ImageDraw.Draw(base), words, dur, safe_w)
+        except Exception as e:
+            print(f"[caption] chunking failed ({type(e).__name__}: {e}) - one line")
+            chunks, base_size = [[(w, 0.0, dur) for w in words]], MIN_SIZE
+    if not chunks:
+        chunks = [[(w, 0.0, max(dur, 0.6)) for w in words]]
 
     os.makedirs(out_dir, exist_ok=True)
     frames = []
@@ -186,12 +293,77 @@ def build_frames(slide_png, speech, audio_duration, out_dir, tag,
         line = " ".join(c[0] for c in chunk)
         span = chunk[-1][2] - chunk[0][1]
         frame = base.copy()
-        layout_line(ImageDraw.Draw(frame), line, base_size, fill)
+        try:
+            draw_block(ImageDraw.Draw(frame), line, base_size, fill, safe_w)
+        except Exception as e:
+            # A shaping/measure failure must not cost the slide its subtitle:
+            # draw the plainest possible line instead.
+            print(f"[caption] chunk {ci} draw failed ({type(e).__name__}: {e})")
+            try:
+                P.draw_smart(ImageDraw.Draw(frame), (1080 // 2, CAPTION_CY), line,
+                             P.font_for(line, MIN_SIZE), fill, anchor="mm")
+            except Exception:
+                pass
         path = os.path.join(out_dir, f"cap_{tag}_{ci:02d}.png")
         frame.save(path)
         frames.append((path, max(span, MIN_STATE)))
 
     return frames or None
+
+
+def build_static_overlay(text, out_path, category="", title="", lang=None,
+                         max_lines=3):
+    """Transparent caption layer for the last-resort burn-in path.
+
+    Used when the timed frames cannot be produced or verified. pipeline.py
+    overlays this PNG on the slide for the whole clip, so the Short still ships
+    with a visible subtitle instead of an empty card.
+    """
+    from PIL import Image, ImageDraw
+
+    line_text = " ".join(caption_words(text, title))
+    if not line_text:
+        return None
+    fill, safe_w = _caption_style(category, title, text, lang)
+    img = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
+    draw_block(ImageDraw.Draw(img), line_text, BASE_SIZE, fill, safe_w,
+               max_lines=max_lines)
+    img.save(out_path)
+    return out_path
+
+
+# --- Verification -----------------------------------------------------------
+def band_has_text(frame_png, card_fill, threshold=300):
+    """Does the caption band of `frame_png` actually contain drawn text?
+
+    The slide is rendered with its body block suppressed, so that band is a flat
+    card fill when no subtitle landed. Any pixel far from that fill is text.
+    Returns True when the check itself cannot run - a broken probe must never
+    cost a render.
+    """
+    try:
+        from PIL import Image
+        im = Image.open(frame_png).convert("RGB").crop(
+            (BAND_X[0], BAND_Y[0], BAND_X[1], BAND_Y[1]))
+    except Exception:
+        return True
+    ref = tuple(card_fill or (30, 41, 59))
+    try:
+        # Counting unique colours is far cheaper than walking 200k pixels, and
+        # the server runs this once per slide under `nice`.
+        colors = im.getcolors(maxcolors=1 << 18)
+    except Exception:
+        return True
+    if colors is None:
+        # More distinct colours than a flat card fill could ever produce.
+        return True
+    hits = 0
+    for count, (r, g, b) in colors:
+        if abs(r - ref[0]) + abs(g - ref[1]) + abs(b - ref[2]) > 90:
+            hits += count
+            if hits >= threshold:
+                return True
+    return False
 
 
 def write_concat_list(frames, out_path, tail=0.0):

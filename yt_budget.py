@@ -19,12 +19,26 @@ QUOTA_PATH = os.path.join(BASE_DIR, "discovery_quota.json")
 
 DAILY_BUDGET = int(os.environ.get("YT_DAILY_UNITS", "10000"))
 UPLOAD_COST = 1600            # videos.insert
-UPLOADS_PER_DAY = 4           # 3 Shorts + 1 long-form
+# Shorts-only channel (owner directive 2026-10-20): long-form is retired, so the
+# reservation now covers Shorts alone. Keep this equal to MAX_SHORTS_PER_DAY in
+# run_daily.py - reserving more starves discovery, reserving less risks running
+# out of units halfway through the day's uploads.
+UPLOADS_PER_DAY = int(os.environ.get("YT_UPLOADS_PER_DAY", "3"))
 SAFETY_UNITS = 800            # headroom for a retry or a late catch-up run
 
 # Cost of the endpoints the pipeline actually uses.
 COST_SEARCH = 100             # search.list
 COST_LIST = 1                 # videos.list / channels.list / playlistItems.list
+
+
+def upload_capacity():
+    """Uploads the day's unit budget allows: 10000 / 1600 = 6.
+
+    This is the API ceiling, not the channel ceiling - a young channel can hit
+    `uploadLimitExceeded` below it, which is why run_daily.py keeps its own,
+    lower MAX_SHORTS_PER_DAY brake.
+    """
+    return DAILY_BUDGET // UPLOAD_COST
 
 
 def _log(msg):
@@ -126,7 +140,8 @@ def can_spend(n):
 
 def report():
     return (f"[quota] spent={spent_today()} uploads_today={uploads_done_today()} "
-            f"free_for_discovery={remaining()}/{DAILY_BUDGET}")
+            f"free_for_discovery={remaining()}/{DAILY_BUDGET} "
+            f"upload_cap={upload_capacity()}/day")
 
 
 def main():

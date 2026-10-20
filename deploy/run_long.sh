@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
 # Daily Persian long-form (16:9, 8-9 min). --upload is REQUIRED or nothing is
 # published. Low priority + serialized + cleanup-after-upload (no server archives).
+#
+# RETIRED 2026-10-20: the channel is Shorts-only. This script is kept so the
+# crontab line can stay (and can be restored), but it exits immediately unless
+# PADIZ_LONGFORM=1 is exported in .env or by hand. Remove the crontab entry too
+# if you want to stop the 30-second wake-up as well.
 set -e
+if [ "${PADIZ_LONGFORM:-0}" != "1" ]; then
+  echo "[long] retired (shorts-only channel) - skipping"
+  exit 0
+fi
 REPO=/opt/padiz/repo
 VENV=/opt/padiz/venv
 cd "$REPO"

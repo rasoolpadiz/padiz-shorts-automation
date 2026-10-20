@@ -34,7 +34,10 @@ FORCE_UPLOAD = (os.environ.get("FORCE_UPLOAD") or "0") == "1"
 # Maximum shorts per day (owner directive 2026-10-03, lowered from 5).
 # YouTube enforces uploadLimitExceeded on young channels; 6 uploads in one day
 # tripped it and blocked the rest of the day's slots.
-MAX_SHORTS_PER_DAY = 3
+# The API quota itself allows 6 (10000 units / 1600 per insert), so this brake is
+# about the CHANNEL, not the quota. Override without a code change:
+#   MAX_SHORTS_PER_DAY=5   (in .env on the server)
+MAX_SHORTS_PER_DAY = int(os.environ.get("MAX_SHORTS_PER_DAY", "3"))
 
 # Slot -> language forcing (peak-audience schedule, Tehran = UTC+3:30).
 # Owner directive 2026-10-09: FA-ONLY channel. Every slot renders Persian;
@@ -230,7 +233,6 @@ def main():
             import gen_shorts as GS
             dynamic = [t for t in GS.load_generated()
                        if t.get("lang") == lang and not t.get("posted")
-                       and not t.get("fallback")
                        and t.get("id") not in posted_ids
                        and _niche_allowed(t, lang)]
         except Exception:
@@ -241,6 +243,13 @@ def main():
                   "nothing is published (the hand-written pool is disabled by "
                   "owner directive).")
             return None
+
+        # Prefer non-fallback drafts first, but allow fallbacks as a safety net
+        # so the pipeline never stalls when Gemini is temporarily unavailable.
+        preferred = [t for t in dynamic if not t.get("fallback")]
+        chosen_pool = preferred if preferred else dynamic
+        if preferred and len(dynamic) > len(preferred):
+            print(f"[shorts] {len(preferred)} live draft(s), {len(dynamic) - len(preferred)} fallback(s) available")
 
         def performance(item):
             try:
@@ -255,11 +264,11 @@ def main():
 
         # Mined content first (it is grounded in a real online source), then the
         # best-performing niche, then the freshest draft.
-        dynamic.sort(key=lambda it: (-was_mined(it), -performance(it)))
-        print(f"Using draft: {dynamic[0].get('title', '')[:70]} "
-              f"(source: {str(dynamic[0].get('mined_from', '') or '(gemini-written)')[:60]}, "
-              f"mined={bool(was_mined(dynamic[0]))})")
-        return dict(dynamic[0], lang=lang)
+        chosen_pool.sort(key=lambda it: (-was_mined(it), -performance(it)))
+        print(f"Using draft: {chosen_pool[0].get('title', '')[:70]} "
+              f"(source: {str(chosen_pool[0].get('mined_from', '') or '(gemini-written)')[:60]}, "
+              f"mined={bool(was_mined(chosen_pool[0]))}, fallback={chosen_pool[0].get('fallback', False)})")
+        return dict(chosen_pool[0], lang=lang)
 
     total_posted = len(posted_records)
     if _posted_today_count(posted_records) >= MAX_SHORTS_PER_DAY and not (FORCE_UPLOAD and not dry_run):
