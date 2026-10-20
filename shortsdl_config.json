@@ -75,7 +75,7 @@
   },
   "watermark": {
     "enabled": true,
-    "text": "@padiz_studio",
+    "text": "@padiz",
     "position": "top",
     "margin_pct": 5.0,
     "font_pct": 2.6,
@@ -88,7 +88,8 @@
     "max_duration_sec": 180,
     "min_views": 0,
     "skip_live": true,
-    "require_vertical": true
+    "require_vertical": true,
+    "min_height": 720
   },
   "download": {
     "max_height": 1080,

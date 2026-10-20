@@ -167,8 +167,11 @@ def collect_candidates(markets: list[str], cfg: dict, skip: set[str], need: int)
     dcfg = cfg.get("discovery", {})
     dcfg_dl = cfg.get("download", {})
     per_query = int(dcfg.get("results_per_query", 25))
-    overfetch = int(dcfg.get("overfetch", 3) or 1)
-    limit = max(need * overfetch, need)
+    # استخر بزرگ‌تر از تعداد موردنیاز: چون افقی/کم‌کیفیت‌ها رد می‌شوند و باید
+    # جایگزین در دست باشد. کشف هزینه‌ی API ندارد (yt-dlp جست‌وجو می‌کند)، پس
+    # ۱۲ کاندید گرفتن ارزان است.
+    overfetch = max(int(dcfg.get("overfetch", 3) or 1), 8)
+    limit = max(need * overfetch, need, 12)
 
     out: list[tuple[str, list[dict]]] = []
     for market in markets:
@@ -214,7 +217,8 @@ def _find_orphan_watermarked(folder: Path, video_id: str) -> Path | None:
 
 def download_usable(market: str, items: list[dict], cfg: dict, outdir: Path,
                     need: int, require_vertical: bool = True,
-                    max_attempts: int = 10):
+                    min_height: int = 720,
+                    max_attempts: int = 12):
     """یک‌به‌یک دانلود می‌کند تا `need` فایل قابل‌قبول جمع شود.
 
     چرا یکی‌یکی و نه دسته‌ای؟ جست‌وجوی «Shorts» تضمین نمی‌کند ویدیو عمودی باشد —
@@ -259,6 +263,14 @@ def download_usable(market: str, items: list[dict], cfg: dict, outdir: Path,
             if h < w:
                 LOG.info("رد شد (افقی %dx%d): %s", w, h, item.get("id"))
                 # از آرشیو درش می‌آوریم تا اگر بعداً خواستیم دوباره دیده شود
+                unarchive(archive, str(item["id"]))
+                cleanup_file(res["file"])
+                continue
+            if h < min_height:
+                # کیفیت پایین روی کانال بد دیده می‌شود. تست واقعی: پربازدیدترین
+                # نتیجه‌ی ترند یک کلیپ ۳۶۰x۶۴۰ بود (بازآپلود کاربر دیگر) — عدد
+                # بازدید بالا تضمین کیفیت نیست.
+                LOG.info("رد شد (کیفیت پایین %dx%d < %dp): %s", w, h, min_height, item.get("id"))
                 unarchive(archive, str(item["id"]))
                 cleanup_file(res["file"])
                 continue
@@ -423,6 +435,7 @@ def run(count: int, markets: list[str], dry_run: bool, no_upload: bool,
         ok_results, folder = download_usable(
             market, items, cfg, outdir, need,
             require_vertical=bool(cfg.get("filters", {}).get("require_vertical", True)),
+            min_height=int(cfg.get("filters", {}).get("min_height", 720) or 0),
         )
         if not ok_results:
             LOG.warning("از بازار %s چیزی دانلود نشد — بازار بعدی.", market)

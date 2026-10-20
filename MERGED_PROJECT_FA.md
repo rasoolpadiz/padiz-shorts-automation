@@ -114,7 +114,7 @@ bash /opt/padiz/repo/deploy/status.sh
 
 هر ویدیوی دانلودشده قبل از آپلود مهر می‌خورد — `watermark.py`:
 
-- یک پلاک با آدرس کانال (`@padiz_studio`) + نقطه‌ی صورتی برند، بالای فریم
+- یک پلاک با آدرس کانال (`@padiz`) + نقطه‌ی صورتی برند، بالای فریم
 - اندازه بر اساس ارتفاع خود ویدیو حساب می‌شود (۷۲۰p و ۱۰۸۰p و ۴K یک‌شکل)
 - با ffmpeg روی تصویر می‌نشیند و صدا به aac تبدیل می‌شود (بعضی دانلودها opus دارند و mp4 یوتیوب را رد می‌کند)
 - **فایل اصلی بلافاصله بعد از مهر زدن پاک می‌شود** و نسخه‌ی مهرخورده هم بعد از آپلود — در هر لحظه فقط یک نسخه روی دیسک است
@@ -124,7 +124,7 @@ bash /opt/padiz/repo/deploy/status.sh
 ```json
 "watermark": {
   "enabled": true,
-  "text": "@padiz_studio",     // آدرس کانال
+  "text": "@padiz",     // آدرس کانال
   "position": "top",           // top | bottom | top-left | top-right | ...
   "margin_pct": 5.0,           // فاصله از لبه
   "font_pct": 2.6,             // اندازه نسبت به ارتفاع ویدیو
@@ -138,7 +138,7 @@ bash /opt/padiz/repo/deploy/status.sh
 تست دستی روی یک فایل:
 
 ```powershell
-python watermark.py input.mp4 -o output.mp4 --text "@padiz_studio"
+python watermark.py input.mp4 -o output.mp4 --text "@padiz"
 ```
 
 ### فیلتر ویدیوهای افقی

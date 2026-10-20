@@ -73,12 +73,14 @@ DEFAULT_CONFIG: dict = {
         # a real trending query), so repost.py re-checks the real dimensions
         # after download and rejects anything wider than it is tall.
         "require_vertical": True,
+        # کیفیت پایین روی کانال بد است؛ ۳۶۰p رد می‌شود.
+        "min_height": 720,
     },
     # Merged repost pipeline: the channel handle is burned onto every downloaded
     # Short before upload (watermark.py).
     "watermark": {
         "enabled": True,
-        "text": "@padiz_studio",
+        "text": "@padiz",
         "position": "top",
         "margin_pct": 5.0,
         "font_pct": 2.6,

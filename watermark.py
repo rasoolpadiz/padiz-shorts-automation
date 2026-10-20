@@ -19,7 +19,7 @@
 
 Usage:
     python watermark.py in.mp4 -o out.mp4
-    python watermark.py in.mp4 --text "@padiz_studio" --position bottom
+    python watermark.py in.mp4 --text "@padiz" --position bottom
 """
 
 from __future__ import annotations
@@ -57,7 +57,7 @@ SS = 3                          # ضریب supersampling برای لبه‌ها�
 
 DEFAULT_CFG = {
     "enabled": True,
-    "text": "@padiz_studio",
+    "text": "@padiz",
     "position": "top",          # top | bottom | top-left | top-right | bottom-left | bottom-right
     "margin_pct": 5.0,          # فاصله از لبه، درصد ارتفاع
     "font_pct": 2.2,            # اندازه فونت، درصد ارتفاع ویدیو
