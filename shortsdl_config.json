@@ -1,8 +1,13 @@
 {
   "output_dir": "repost_out",
   "per_market_limit": 25,
+  "daily": {
+    "_note": "repost_first=true یعنی ریپاست‌ها اول اجرا شوند و سهمشان قطعی باشد. سهم هر طرف مستقل است: repost.per_day برای ریپاست، باقی سقف روزانه برای شورت‌های ساخته‌ی خودمان.",
+    "repost_first": true,
+    "max_uploads": 5
+  },
   "repost": {
-    "per_day": 1,
+    "per_day": 2,
     "markets": [
       "trending"
     ],

@@ -7,13 +7,13 @@
 
 حالا هر دو در همین ریپو هستند و این فایل ترتیب درست اجرا را تضمین می‌کند:
 
-    مرحله ۱ — شورت فارسی: محتوای ساخته‌شده‌ی خودمان (اولویت اول)
-    مرحله ۲ — ریپاست: حداکثر ۱ ویدیو، و فقط اگر سهمیه مانده باشد
+    مرحله ۱ — ریپاست: ویدیوهای ترند پیدا/دانلود و تبدیل و منتشر می‌شوند
+    مرحله ۲ — شورت فارسی: محتوای ساخته‌شده‌ی خودمان با سهمیه‌ی باقی‌مانده
 
-**ترتیب عوض شد (۲۰۲۶-۱۰-۲۱):** قبلاً ریپاست اول اجرا می‌شد. حالا شورت
-اصلی اول است، چون هدف درآمد است: یوتیوب کانالی را که عمده‌ی محتوایش
-بازنشر کار دیگران است در برنامه‌ی درآمدزایی قبول نمی‌کند. با این ترتیب،
-اگر سهمیه تنگ باشد، محتوای اصلی جای خودش را می‌گیرد و ریپاست کوتاه می‌آید.
+**هر دو طرف سهم تضمین‌شده دارند.** `repost.per_day` سهم ریپاست را قطعی
+می‌کند (پیش‌فرض ۲) و شورت‌های اصلی با آنچه از سقف روزانه باقی می‌ماند اجرا
+می‌شوند. ترتیب اجرا با `daily.repost_first` کنترل می‌شود و فقط تعیین می‌کند
+اگر وسط روز سهمیه تنگ شد، کدام مرحله کامل اجرا شده باشد.
 
 سقف مشترک: MAX_UPLOADS_PER_DAY (پیش‌فرض ۵). هر آپلود ۱۶۰۰ واحد از ۱۰۰۰۰
 واحد روزانه‌ی YouTube Data API را می‌خورد، پس ۵ آپلود = ۸۰۰۰ واحد و ۲۰۰۰
@@ -26,7 +26,7 @@ Usage
     python run_all_daily.py --only repost   # فقط ریپاست
     python run_all_daily.py --only shorts   # فقط شورت فارسی
     python run_all_daily.py --dry-run       # بدون آپلود (تست)
-    python run_all_daily.py --repost-count 1
+    python run_all_daily.py --repost-count 3
 """
 
 from __future__ import annotations
@@ -49,6 +49,20 @@ except (AttributeError, OSError):
 MAX_UPLOADS_PER_DAY = int(os.environ.get("MAX_UPLOADS_PER_DAY", "5"))
 SHORTS_FILE = BASE_DIR / "posted_shorts.json"
 REPOST_FILE = BASE_DIR / "repost_posted.json"
+
+
+def _max_uploads() -> int:
+    """سقف روزانه: env > کانفیگ (`daily.max_uploads`) > پیش‌فرض ۵."""
+    if os.environ.get("MAX_UPLOADS_PER_DAY"):
+        return int(os.environ["MAX_UPLOADS_PER_DAY"])
+    try:
+        from shortsdl.config import load_config
+        v = (load_config().get("daily") or {}).get("max_uploads")
+        if v:
+            return max(1, int(v))
+    except Exception:
+        pass
+    return MAX_UPLOADS_PER_DAY
 
 
 def _log(msg: str) -> None:
@@ -78,7 +92,7 @@ def _banner(title: str) -> None:
 
 
 def step_repost(count: int, dry_run: bool) -> int:
-    _banner(f"مرحله ۲ — ریپاست تبدیل‌شده ({count} ویدیو)")
+    _banner(f"ریپاست تبدیل‌شده ({count} ویدیو)")
     try:
         import repost
     except Exception as exc:  # noqa: BLE001
@@ -98,7 +112,7 @@ def step_repost(count: int, dry_run: bool) -> int:
 
 
 def step_shorts(dry_run: bool) -> int:
-    _banner("مرحله ۱ — شورت فارسی (ساخت خودمان)")
+    _banner("شورت فارسی (ساخت خودمان)")
     if dry_run:
         _log("[shorts] dry-run: run_daily.py اجرا نمی‌شود.")
         return 0
@@ -133,46 +147,61 @@ def main(argv: list[str] | None = None) -> int:
 
     _banner(f"اجرای روزانه — {datetime.now().astimezone():%Y-%m-%d %H:%M} "
             f"({os.name})")
+    cap = _max_uploads()
     done = uploads_today()
-    _log(f"[cap] آپلودهای امروز: {done}/{MAX_UPLOADS_PER_DAY}")
+    _log(f"[cap] آپلودهای امروز: {done}/{cap}")
 
-    if done >= MAX_UPLOADS_PER_DAY and not args.dry_run:
-        _log(f"[cap] سقف آپلود روزانه پر شده ({done}/{MAX_UPLOADS_PER_DAY}) — خروج امن.")
+    if done >= cap and not args.dry_run:
+        _log(f"[cap] سقف آپلود روزانه پر شده ({done}/{cap}) — خروج امن.")
         return 0
 
     repost_count = args.repost_count
+    repost_first = True
     if repost_count is None:
         try:
             from shortsdl.config import load_config
             cfg = load_config()
-            repost_count = int((cfg.get("repost") or {}).get("per_day", 1))
+            repost_count = int((cfg.get("repost") or {}).get("per_day", 2))
+            repost_first = bool((cfg.get("daily") or {}).get("repost_first", True))
         except Exception:
-            repost_count = 1
+            repost_count = 2
 
-    # سهمیه‌ی امروز کم مانده؟ اولویت به محتوای ساخته‌شده‌ی خودمان است.
-    room = MAX_UPLOADS_PER_DAY - done
+    room = cap - done
     repost_count = min(repost_count, room) if not args.dry_run else repost_count
-    _log(f"[plan] شورت اصلی: {'بله' if args.only in ('all', 'shorts') else 'خیر'} | "
-         f"ریپاست (تبدیل‌شده): {repost_count}")
+    _log(f"[plan] ترتیب: {'ریپاست اول' if repost_first else 'شورت اول'} | "
+         f"ریپاست (تبدیل‌شده): {repost_count} | "
+         f"شورت اصلی: {'بله' if args.only in ('all', 'shorts') else 'خیر'}")
 
     rc = 0
-    # مرحله ۱: محتوای اصلی — اول اجرا می‌شود تا سهمیه‌اش تضمین شود.
-    if args.only in ("all", "shorts"):
-        if args.dry_run or (MAX_UPLOADS_PER_DAY - uploads_today()) > 0:
-            rc |= step_shorts(args.dry_run)
-        else:
-            _log("[shorts] سهمیه‌ای برای شورت نمانده — رد شد.")
 
-    # مرحله ۲: ریپاست تبدیل‌شده با آنچه از سهمیه باقی مانده.
-    if args.only in ("all", "repost") and repost_count > 0:
-        left = MAX_UPLOADS_PER_DAY - uploads_today()
-        if args.dry_run or left > 0:
-            rc |= step_repost(min(repost_count, left) if not args.dry_run
-                              else repost_count, args.dry_run)
-        else:
+    def do_repost() -> int:
+        """ریپاست با سهم تضمین‌شده‌ی خودش (per_day)."""
+        if args.only not in ("all", "repost") or repost_count <= 0:
+            return 0
+        left = cap - uploads_today()
+        if not args.dry_run and left <= 0:
             _log("[repost] سهمیه‌ای نمانده — رد شد.")
+            return 0
+        n = repost_count if args.dry_run else min(repost_count, left)
+        return step_repost(n, args.dry_run)
 
-    _banner(f"پایان — آپلودهای امروز: {uploads_today()}/{MAX_UPLOADS_PER_DAY}")
+    def do_shorts() -> int:
+        """شورت ساخته‌ی خودمان با آنچه از سهمیه باقی مانده."""
+        if args.only not in ("all", "shorts"):
+            return 0
+        if not args.dry_run and (cap - uploads_today()) <= 0:
+            _log("[shorts] سهمیه‌ای برای شورت نمانده — رد شد.")
+            return 0
+        return step_shorts(args.dry_run)
+
+    # ترتیب از کانفیگ می‌آید (`daily.repost_first`). پیش‌فرض: ریپاست اول،
+    # چون ویدیوهای ترند بازدید می‌آورند و خواسته‌ی مالک این است که سهمشان
+    # تضمین باشد — نه اینکه فقط وقتی جا ماند اجرا شوند.
+    for step in ((do_repost, do_shorts) if repost_first
+                 else (do_shorts, do_repost)):
+        rc |= step()
+
+    _banner(f"پایان — آپلودهای امروز: {uploads_today()}/{cap}")
     return rc
 
 
