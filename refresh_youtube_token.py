@@ -33,6 +33,10 @@ B64_PATH = os.path.join(BASE_DIR, "YOUTUBE_TOKEN_B64.txt")
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.readonly",
+    # force-ssl = اجازه‌ی حذف/ویرایش ویدیوهای خودمان. بدون این، یک آپلود
+    # خراب تا ابد روی کانال می‌ماند و مالک باید دستی پاکش کند. با این،
+    # upload_status.py --purge خودش ویدیوی مرده را برمی‌دارد.
+    "https://www.googleapis.com/auth/youtube.force-ssl",
 ]
 
 for stream in (sys.stdout, sys.stderr):

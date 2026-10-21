@@ -25,7 +25,8 @@
       "viral",
       "trending"
     ],
-    "description_template": "{title}\n\n🎙 روایت و تدوین: پادیز استدیو\n🎬 منبع تصویر: {channel}\n🔗 لینک اصلی: {source}\n\nاین ویدیو با روایت و تدوین فارسی بازنشر شده است.\n\n{hashtags}"
+    "description_template": "{title}\n\n🎙 روایت و تدوین: پادیز استدیو\n🎬 منبع تصویر: {channel}\n🔗 لینک اصلی: {source}\n\nاین ویدیو با روایت و تدوین فارسی بازنشر شده است.\n\n{hashtags}",
+    "purge_dead": true
   },
   "transform": {
     "enabled": true,

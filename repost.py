@@ -379,7 +379,10 @@ def run(count: int, markets: list[str], dry_run: bool, no_upload: bool,
     if not dry_run and not no_upload:
         try:
             import upload_status
-            upload_status.audit(upload_status.service())
+            upload_status.audit(
+                upload_status.service(),
+                purge_dead=bool(rcfg.get("purge_dead", True)),
+            )
         except Exception as exc:  # noqa: BLE001
             LOG.warning("[audit] بررسی سلامت انجام نشد (%s)", str(exc)[:100])
 

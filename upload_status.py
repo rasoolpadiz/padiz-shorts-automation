@@ -153,11 +153,62 @@ def render(rows, elapsed=None, stuck_hours=2.0):
     return "\n".join(lines)
 
 
-def audit(yt, stuck_hours=2.0):
+DELETE_SCOPES = {
+    "https://www.googleapis.com/auth/youtube.force-ssl",
+    "https://www.googleapis.com/auth/youtube",
+}
+
+
+def can_delete(yt=None) -> tuple[bool, str]:
+    """آیا توکن اجازه‌ی حذف دارد؟
+
+    بدون API چک می‌شود: scope داخل token.pickle خوانده می‌شود (هزینه‌ی
+    واحدی صفر). توکن قدیمی فقط `youtube.upload` + `youtube.readonly`
+    داشت، پس حذف با `insufficientPermissions` شکست می‌خورد.
+    """
+    try:
+        with open(TOKEN_PATH, "rb") as fh:
+            creds = pickle.load(fh)
+        scopes = set(creds.scopes or [])
+    except Exception:  # noqa: BLE001
+        scopes = set()
+
+    if scopes & DELETE_SCOPES:
+        return True, "توکن مجوز حذف دارد (force-ssl)"
+    if not scopes:
+        # scope نامعلوم — امتحان می‌کنیم؛ purge خطای هر ویدیو را جدا گزارش می‌دهد.
+        return True, "scope نامعلوم — حذف امتحان می‌شود"
+    return False, ("توکن اجازه‌ی حذف ندارد (فقط آپلود). یک بار "
+                   "python refresh_youtube_token.py را اجرا کن")
+
+
+def purge(yt, ids) -> tuple[int, int]:
+    """ویدیوهای مرده را از کانال حذف می‌کند. (حذف‌شده، ناموفق)"""
+    ok_count = fail = 0
+    for vid in ids:
+        try:
+            yt.videos().delete(id=vid).execute()
+            print("  🗑  حذف شد: %s" % vid)
+            ok_count += 1
+        except Exception as exc:  # noqa: BLE001
+            msg = str(exc)
+            if "insufficientPermissions" in msg:
+                print("  ✘ %s: توکن اجازه‌ی حذف ندارد" % vid)
+            elif "videoNotFound" in msg or "404" in msg:
+                print("  – %s: از قبل حذف شده بود" % vid)
+                ok_count += 1
+            else:
+                print("  ✘ %s: %s" % (vid, msg[:110]))
+            fail += 1
+    return ok_count, fail
+
+
+def audit(yt, stuck_hours=2.0, purge_dead=False):
     """وضعیت سلامت همه‌ی رکوردها را در repost_posted.json به‌روز می‌کند.
 
     نتیجه: ویدیوهای مرده سهمیه‌ی روزانه را نمی‌خورند، پس اجرای بعدی
-    جایگزینشان را آپلود می‌کند.
+    جایگزینشان را آپلود می‌کند. با `purge_dead=True` خودشان هم از کانال
+    حذف می‌شوند (نیازمند scope حذف).
     """
     path = os.path.join(BASE_DIR, "repost_posted.json")
     if not os.path.exists(path):
@@ -177,6 +228,7 @@ def audit(yt, stuck_hours=2.0):
             index[vid] = r
 
     changed = 0
+    newly_dead = []
     for chunk_start in range(0, len(ids), 50):
         chunk = ids[chunk_start:chunk_start + 50]
         for snap in snapshot(yt, chunk):
@@ -190,8 +242,26 @@ def audit(yt, stuck_hours=2.0):
             if rec.get("health") != new:
                 rec["health"] = new
                 changed += 1
+            if new == "dead" and not rec.get("purged"):
+                newly_dead.append(snap["id"])
             print("  %-6s %-13s %s" % (new.upper(), snap["id"],
                                        (snap.get("title") or "")[:48]))
+
+    if purge_dead and newly_dead:
+        allowed, why = can_delete(yt)
+        print("\n— حذف ویدیوهای مرده (%d مورد) —" % len(newly_dead))
+        print("  " + why)
+        if allowed:
+            done, failed = purge(yt, newly_dead)
+            for vid in newly_dead:
+                if vid in index:
+                    index[vid]["purged"] = True
+                    index[vid]["health"] = "dead"
+            changed += done
+            print("  %d حذف شد، %d ناموفق" % (done, failed))
+        else:
+            print("  حذف انجام نشد. این ویدیوها روی کانال می‌مانند تا تو "
+                  "دستی پاکشان کنی، یا یک بار توکن را با مجوز جدید بسازی.")
 
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(rows, fh, ensure_ascii=False, indent=2)
@@ -205,6 +275,8 @@ def main():
     ap.add_argument("--recent", action="store_true", help="آخرین آپلودهای repost")
     ap.add_argument("--audit", action="store_true",
                     help="وضعیت سلامت را در repost_posted.json ثبت کن")
+    ap.add_argument("--purge", action="store_true",
+                    help="با --audit: ویدیوهای مرده را از کانال حذف کن")
     ap.add_argument("--stuck-hours", type=float, default=2.0,
                     help="بعد از این تعداد ساعت «گیرکرده» حساب می‌شود (پیش‌فرض ۲)")
     ap.add_argument("--watch", type=int, default=0, metavar="SEC",
@@ -212,8 +284,8 @@ def main():
     ap.add_argument("--interval", type=int, default=60)
     args = ap.parse_args()
 
-    if args.audit:
-        return audit(service(), args.stuck_hours)
+    if args.audit or args.purge:
+        return audit(service(), args.stuck_hours, purge_dead=args.purge)
 
     ids = list(args.ids)
     if args.recent or not ids:
