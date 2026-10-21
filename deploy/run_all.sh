@@ -48,13 +48,19 @@ fi
 # Narration is what makes a repost count as a new work instead of a re-upload,
 # and edge-tts is blocked from some IP ranges (403 from Microsoft). Test it
 # once a day so the log shows the truth before the first repost is attempted.
+#
+# NOTE (2026-10-21): a failed TTS no longer blocks publishing. transform.py
+# falls back to the original audio + visual editing (narration.on_fail=upload),
+# because a hard block silently produced "zero uploads today" which looked
+# exactly like a YouTube problem. Set narration.on_fail=skip to restore the
+# old strict behaviour.
 TTS_MARK="/opt/padiz/.tts_checked_$(date -u +%Y%m%d)"
 if [ ! -f "$TTS_MARK" ]; then
   if nice -n 15 "$PY" transform.py --tts-test >> "$LOG" 2>&1; then
     echo "[all] TTS OK - reposts will be narrated" >> "$LOG"
   else
-    echo "[all] WARNING: TTS FAILED - narration.required=true means reposts will be SKIPPED" >> "$LOG"
-    echo "[all]          fix: set GEMINI_API_KEY in .env, or set narration.required=false" >> "$LOG"
+    echo "[all] WARNING: TTS FAILED - reposts will publish with ORIGINAL AUDIO" >> "$LOG"
+    echo "[all]          fix for Persian narration: set GEMINI_API_KEY in .env" >> "$LOG"
   fi
   : > "$TTS_MARK" 2>/dev/null || true
 fi
@@ -70,3 +76,8 @@ if nice -n 15 ionice -c2 -n7 "$PY" run_all_daily.py "$@" >> "$LOG" 2>&1; then
 else
   echo "[all] FAILED $TS (exit $?) - artifacts kept" >> "$LOG"
 fi
+
+# Heartbeat: one small file that answers "is everything fine?" without SSH.
+# Written on success AND failure, so a stale health.json is itself a signal
+# that cron stopped running.
+nice -n 15 "$PY" health.py --write >> "$LOG" 2>&1 || true
