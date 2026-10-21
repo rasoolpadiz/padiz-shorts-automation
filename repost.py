@@ -55,6 +55,7 @@ from shortsdl.downloader import Downloader  # noqa: E402
 from shortsdl.utils import read_json, setup_logging, write_json  # noqa: E402
 
 import curate  # noqa: E402   (فیلتر و امتیازدهی محتوا)
+import media_check  # noqa: E402  (اعتبارسنجی فایل قبل از آپلود)
 import transform  # noqa: E402  (تبدیل به ویدیوی تازه: روایت + تدوین)
 import watermark  # noqa: E402  (مهر زدن آدرس کانال روی ویدیو)
 
@@ -90,8 +91,19 @@ def posted_ids(records: list[dict]) -> set[str]:
 
 
 def count_today(records: list[dict]) -> int:
+    """چند ریپاست امروز واقعاً «زنده» منتشر شد.
+
+    رکوردهایی که `health == "dead"` دارند شمرده نمی‌شوند: یوتیوب فایل را
+    نپذیرفته و ویدیو هرگز قابل پخش نشده. اگر این‌ها را بشماریم، یک آپلود
+    خراب سهمیه‌ی روز را می‌سوزاند و روز بعد هم چیزی منتشر نمی‌شود —
+    همان چیزی که ۲۰۲۶-۱۰-۲۱ اتفاق افتاد.
+    """
     today = _today_utc()
-    return sum(1 for r in records if str(r.get("posted_at", ""))[:10] == today)
+    return sum(
+        1 for r in records
+        if str(r.get("posted_at", ""))[:10] == today
+        and r.get("health") != "dead"
+    )
 
 
 def record_upload(video_id: str, item: dict, url: str, market: str) -> None:
@@ -105,6 +117,9 @@ def record_upload(video_id: str, item: dict, url: str, market: str) -> None:
         "title": item.get("title", ""),
         "views": item.get("views") or 0,
         "posted_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        # pending → با `python upload_status.py --audit` به live/dead تبدیل
+        # می‌شود. تا وقتی pending است جزو سهمیه حساب می‌شود (محافظه‌کارانه).
+        "health": "pending",
     })
     save_state(records)
 
@@ -357,6 +372,17 @@ def run(count: int, markets: list[str], dry_run: bool, no_upload: bool,
         markets = rcfg.get("markets") or ["trending", "global"]
 
     per_day = int(rcfg.get("per_day", DEFAULT_PER_DAY) or DEFAULT_PER_DAY)
+
+    # پیش از شمارش سهمیه، سلامت آپلودهای قبلی بررسی می‌شود. ویدیویی که
+    # یوتیوب فایلش را باز نکرده («آپلود مرده») نباید سهمیه‌ی امروز را
+    # بخورد — همان اتفاقی که ۲۰۲۶-۱۰-۲۱ باعث شد هیچ ریپاستی منتشر نشود.
+    if not dry_run and not no_upload:
+        try:
+            import upload_status
+            upload_status.audit(upload_status.service())
+        except Exception as exc:  # noqa: BLE001
+            LOG.warning("[audit] بررسی سلامت انجام نشد (%s)", str(exc)[:100])
+
     state = load_state()
     done_today = count_today(state)
 
@@ -486,6 +512,18 @@ def run(count: int, markets: list[str], dry_run: bool, no_upload: bool,
                 cleanup_file(res["file"])
                 continue
             res["file"] = marked
+
+        # اعتبارسنجی نهایی: فایلی که یوتیوب نمی‌تواند باز کند نباید آپلود شود.
+        # دو ویدیوی ۲۰۲۶-۱۰-۲۰ همین‌جا رد می‌شدند (container=None در سمت
+        # یوتیوب، duration=P0D، ۹ ساعت گیر روی processing).
+        chk = media_check.probe(res["file"])
+        if not chk["ok"]:
+            LOG.error("فایل سالم نیست — آپلود نمی‌شود: %s (%s)",
+                      Path(res["file"]).name, chk["reason"])
+            unarchive(outdir / ".download_archive.txt", str(item["id"]))
+            cleanup_file(res["file"])
+            continue
+        LOG.info("  اعتبارسنجی: %s", chk["reason"])
 
         url = upload_one(res["file"], item, rcfg)
         if not url:

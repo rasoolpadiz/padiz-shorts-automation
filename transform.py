@@ -71,8 +71,13 @@ DEFAULTS = {
     "enabled": True,
     "narration": {
         "enabled": True,
-        # اگر روایت ساخته نشود، ویدیو آپلود نمی‌شود. عمدی: ریپاست بدون روایت
-        # همان محتوای بازاستفاده‌شده است و برای درآمد خطر دارد.
+        # اگر روایت ساخته نشود چه شود؟
+        #   "upload" = با تدوین تصویری (punch-in + کارت‌ها + برند) منتشر شود و
+        #              صدای اصلی حفظ شود. پیش‌فرض: ویدیو از دست نمی‌رود.
+        #   "skip"   = منتشر نشود. امن‌ترین حالت برای درآمد، ولی اگر TTS روی
+        #              سرور کار نکند یعنی روزی صفر ویدیو منتشر می‌شود.
+        # `required` فقط برای سازگاری با نسخه‌های قبلی نگه داشته شده است.
+        "on_fail": "upload",
         "required": True,
         "backends": ["edge", "gemini"],   # به همین ترتیب امتحان می‌شوند
         "voice": "fa-IR-FaridNeural",
@@ -565,14 +570,24 @@ def build(src: str, item: dict | None = None, cfg: dict | None = None,
                     backends=list(ncfg.get("backends") or ["edge", "gemini"]),
                 )
             if not voice_path:
-                if ncfg.get("required", True):
+                on_fail = str(ncfg.get("on_fail")
+                              or ("skip" if ncfg.get("required") else "upload")).lower()
+                if on_fail == "skip":
                     LOG.error(
-                        "[transform] روایت ساخته نشد و narration.required=true است "
+                        "[transform] روایت ساخته نشد و narration.on_fail=skip است "
                         "— این ویدیو آپلود نمی‌شود (ریپاست بدون روایت = محتوای "
                         "بازاستفاده‌شده). تست TTS: python transform.py --tts-test"
                     )
                     return src if on_error == "raw" else None
-                LOG.warning("[transform] روایت ساخته نشد — فقط تصویر تبدیل می‌شود")
+                # ویدیو را از دست نمی‌دهیم: تدوین تصویری انجام می‌شود و صدای
+                # اصلی حفظ می‌شود (بدون این، خروجی بی‌صدا می‌شد چون
+                # audio.original_volume پیش‌فرض صفر است).
+                LOG.warning(
+                    "[transform] روایت ساخته نشد — با صدای اصلی و تدوین تصویری "
+                    "منتشر می‌شود. برای روایت: GEMINI_API_KEY را ست کن یا "
+                    "narration.on_fail را skip بگذار."
+                )
+                narration["no_voice"] = True
 
         # ---- ۲) کارت‌ها ----
         cw, ch = _even(W), _even(H)
@@ -645,6 +660,10 @@ def build(src: str, item: dict | None = None, cfg: dict | None = None,
         # ---- ۴) صدا ----
         a_idx = idx
         vol = float(aud.get("original_volume") or 0.0)
+        if narration.get("no_voice"):
+            # روایت نداریم؛ اگر صدای اصلی هم حذف شود ویدیو بی‌صدا منتشر
+            # می‌شود که هم بد به نظر می‌رسد هم در Shorts بازدهی ندارد.
+            vol = max(vol, float(aud.get("fallback_volume") or 0.9))
         delay = int(ncfg.get("delay_ms") or 0)
         audio_out = None
 

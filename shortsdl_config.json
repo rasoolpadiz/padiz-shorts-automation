@@ -31,7 +31,7 @@
     "enabled": true,
     "narration": {
       "enabled": true,
-      "required": true,
+      "on_fail": "upload",
       "backends": [
         "edge",
         "gemini"
@@ -50,7 +50,8 @@
       "cta": "سابسکرایب کن"
     },
     "audio": {
-      "original_volume": 0.0
+      "original_volume": 0.0,
+      "fallback_volume": 0.9
     },
     "crf": 22,
     "preset": "veryfast",

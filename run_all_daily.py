@@ -98,6 +98,9 @@ def step_repost(count: int, dry_run: bool) -> int:
     except Exception as exc:  # noqa: BLE001
         _log(f"[repost] import failed: {type(exc).__name__}: {exc}")
         return 1
+
+    # بررسی سلامت آپلودهای قبلی داخل خود repost.run() انجام می‌شود
+    # (upload_status.audit) تا حتی اجرای دستی هم سهمیه‌ی مرده نداشته باشد.
     try:
         return repost.run(
             count=count,
