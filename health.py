@@ -176,8 +176,12 @@ def build(net=True):
 def render(rep):
     icon = {"OK": "✅", "WARN": "⚠️ ", "FAIL": "❌"}[rep["status"]]
     t, q, s = rep["token"], rep["quota"], rep["state"]
+    import socket
     lines = [
         "%s  وضعیت کلی: %s" % (icon, rep["status"]),
+        # مهم: هر ماشین state و دیسک خودش را دارد. بدون این خط، گزارش
+        # ماشین محلی با سرور اشتباه گرفته می‌شود (۲۰۲۶-۱۰-۲۱ پیش آمد).
+        "این گزارش از: %s | %s" % (socket.gethostname(), BASE_DIR),
         "-" * 58,
         "توکن     : %s%s" % (
             "سالم" if t["ok"] else "خراب",
